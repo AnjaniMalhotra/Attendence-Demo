@@ -3,10 +3,10 @@ import os
 import pandas as pd
 from datetime import datetime
 import pickle
-from chatbot import get_gemini_pandas_agent # Import the chatbot agent function
 
 # ---- Admin credentials ----
 # Read credentials from st.secrets (from .streamlit/secrets.toml or Streamlit Cloud secrets)
+
 ADMIN_USERNAME = st.secrets["ADMIN_USERNAME"]
 ADMIN_PASSWORD = st.secrets["ADMIN_PASSWORD"]
 
@@ -202,19 +202,17 @@ def show_admin_panel():
     st.subheader(f"Attendance for {selected_class}")
     
     file_path = f"{selected_class}.csv"
-    current_df = pd.DataFrame() # Initialize empty DataFrame
-
     if os.path.exists(file_path):
         try:
-            current_df = pd.read_csv(file_path)
-            if current_df.empty:
+            df = pd.read_csv(file_path)
+            if df.empty:
                 st.info(f"No attendance recorded yet for {selected_class}.")
             else:
-                st.dataframe(current_df) # Display the DataFrame
+                st.dataframe(df)
 
                 st.download_button(
                     "Download Attendance CSV",
-                    current_df.to_csv(index=False).encode('utf-8'), # Ensure utf-8 encoding for download
+                    df.to_csv(index=False).encode('utf-8'), # Ensure utf-8 encoding for download
                     file_name=f"attendance_{selected_class}_{datetime.now().strftime('%Y%m%d')}.csv",
                     mime="text/csv",
                     key="download_csv_button"
@@ -225,58 +223,3 @@ def show_admin_panel():
             st.error(f"Error reading attendance data: {e}")
     else:
         st.warning(f"No attendance file found for {selected_class}. Please create the classroom first.")
-    
-    st.markdown("---")
-
-    # --- Chatbot for Attendance Data Querying ---
-    st.subheader("Ask about Attendance Data")
-
-    # Initialize chat history in session state if not present
-    if "chat_history" not in st.session_state:
-        st.session_state.chat_history = []
-        st.session_state.chat_history.append({"role": "assistant", "content": "Hello! I can answer questions about the attendance data displayed above. What would you like to know?"})
-
-    # Display chat messages from history
-    for message in st.session_state.chat_history:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
-
-    # Get user input for chat
-    if prompt := st.chat_input("Ask a question about attendance...", key="chatbot_input"): # Added a key
-        # Add user message to chat history
-        st.session_state.chat_history.append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
-            st.markdown(prompt)
-
-        with st.chat_message("assistant"):
-            if current_df.empty:
-                response_content = "Please make sure a class is selected and has attendance data before asking questions."
-            else:
-                with st.spinner("Thinking..."):
-                    try:
-                        # Get the Gemini-powered Pandas agent
-                        agent = get_gemini_pandas_agent(current_df)
-                        
-                        # Pass prompt as a dictionary input to agent.invoke
-                        # This is the standard way to invoke agents and helps prevent internal errors.
-                        # Adding a more explicit check for the prompt content itself.
-                        if prompt.strip() == "":
-                            response_content = "Please enter a non-empty question."
-                        else:
-                            agent_result = agent.invoke({"input": prompt}) 
-                            
-                            # Extract the output from the agent's result dictionary
-                            response_content = agent_result.get('output', 'Sorry, I could not find an answer or the agent returned an unexpected format.')
-                            
-                            # --- FIX: More robust check for empty or non-string response ---
-                            if not response_content or not isinstance(response_content, str) or response_content.strip() == "":
-                                response_content = "Sorry, the AI agent returned an uninterpretable or empty response. Please try rephrasing your question."
-
-                    except Exception as e:
-                        # Catch any exception during the agent's invocation, including Gemini API errors
-                        response_content = f"An error occurred while processing your request: {e}\n\nPlease try rephrasing your question."
-            
-            st.markdown(response_content)
-            st.session_state.chat_history.append({"role": "assistant", "content": response_content})
-
-    
