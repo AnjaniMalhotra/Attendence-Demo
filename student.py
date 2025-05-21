@@ -64,6 +64,12 @@ def show_student_panel():
             if not name.strip() or not roll.strip() or not token.strip():
                 st.warning("All fields are required.")
                 return
+            
+            # --- NEW VALIDATION: Check if Roll Number is numeric ---
+            if not roll.strip().isdigit():
+                st.warning("Roll Number must be numeric.")
+                return
+            # --- END NEW VALIDATION ---
 
             admin_state = load_admin_state()
             if admin_state is None:
