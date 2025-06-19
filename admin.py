@@ -1,67 +1,21 @@
 import streamlit as st
-import gspread
+import os
 import pandas as pd
 from datetime import datetime
-from oauth2client.service_account import ServiceAccountCredentials
 import pickle
-import os
 
-# ---- Credentials ----
-ADMIN_USERNAME = st.secrets["ADMIN"]["ADMIN_USERNAME"]
-ADMIN_PASSWORD = st.secrets["ADMIN"]["ADMIN_PASSWORD"]
+# ---- Admin credentials ----
+ADMIN_USERNAME = st.secrets["ADMIN_USERNAME"]
+ADMIN_PASSWORD = st.secrets["ADMIN_PASSWORD"]
 
-# ---- Google Sheets Setup ----
-scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-creds_dict = dict(st.secrets["gspread"])
-credentials = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
-client = gspread.authorize(credentials)
-
-SHEET_NAME = "Attendance"
 STATE_FILE = "streamlit_session.pkl"
+CSV_DIR = "class_data"  # Folder for all classroom CSVs
 
-# ---- Google Sheets Helpers ----
+# Ensure the directory exists
+os.makedirs(CSV_DIR, exist_ok=True)
 
-def get_worksheet(class_name):
-    try:
-        sh = client.open(SHEET_NAME)
-        return sh.worksheet(class_name)
-    except:
-        return None
+# ---- Helper Functions ----
 
-def create_classroom(class_name):
-    sh = client.open(SHEET_NAME)
-    try:
-        sh.add_worksheet(title=class_name, rows="100", cols="20")
-        ws = sh.worksheet(class_name)
-        ws.append_row(["Roll Number", "Name"])  # headers
-    except Exception as e:
-        st.error(f"Error creating class: {e}")
-
-def delete_classroom(class_name):
-    sh = client.open(SHEET_NAME)
-    try:
-        sh.del_worksheet(sh.worksheet(class_name))
-        for key in ["attendance_status", "attendance_codes", "attendance_limits"]:
-            st.session_state[key].pop(class_name, None)
-        save_admin_state()
-    except Exception as e:
-        st.error(f"Error deleting class: {e}")
-
-def get_class_list():
-    sh = client.open(SHEET_NAME)
-    return [ws.title for ws in sh.worksheets()]
-
-def get_attendance_df(class_name):
-    ws = get_worksheet(class_name)
-    data = ws.get_all_records()
-    return pd.DataFrame(data)
-
-def update_attendance_df(class_name, df):
-    ws = get_worksheet(class_name)
-    ws.clear()
-    ws.update([df.columns.tolist()] + df.values.tolist())
-
-# ---- Session Persistence ----
 def save_admin_state():
     admin_state = {
         "attendance_status": st.session_state.attendance_status,
@@ -73,19 +27,40 @@ def save_admin_state():
 
 def load_admin_state():
     if os.path.exists(STATE_FILE):
-        with open(STATE_FILE, "rb") as f:
-            return pickle.load(f)
-    return {"attendance_status": {}, "attendance_codes": {}, "attendance_limits": {}}
+        try:
+            with open(STATE_FILE, "rb") as f:
+                return pickle.load(f)
+        except Exception as e:
+            st.error(f"Error loading admin state: {e}")
+            return {"attendance_status": {}, "attendance_codes": {}, "attendance_limits": {}}
+    else:
+        return {"attendance_status": {}, "attendance_codes": {}, "attendance_limits": {}}
+
+def get_class_list():
+    return [f.replace(".csv", "") for f in os.listdir(CSV_DIR) if f.endswith(".csv")]
+
+def create_classroom(class_name):
+    file_path = os.path.join(CSV_DIR, f"{class_name}.csv")
+    if not os.path.exists(file_path):
+        df = pd.DataFrame(columns=["Roll Number", "Name"])
+        df.to_csv(file_path, index=False)
+
+def delete_classroom(class_name):
+    file_path = os.path.join(CSV_DIR, f"{class_name}.csv")
+    if os.path.exists(file_path):
+        os.remove(file_path)
+        st.session_state.attendance_status.pop(class_name, None)
+        st.session_state.attendance_codes.pop(class_name, None)
+        st.session_state.attendance_limits.pop(class_name, None)
+        save_admin_state()
 
 def trigger_student_refresh():
     with open("refresh_trigger.txt", "w") as f:
         f.write(datetime.now().isoformat())
 
-# ---- UI Logic ----
 def show_admin_panel():
     st.title("Admin Panel")
 
-    # --- Login ---
     if "admin_logged_in" not in st.session_state:
         st.session_state.admin_logged_in = False
 
@@ -96,99 +71,111 @@ def show_admin_panel():
         if st.button("Login"):
             if username == ADMIN_USERNAME and password == ADMIN_PASSWORD:
                 st.session_state.admin_logged_in = True
-                state = load_admin_state()
-                st.session_state.attendance_status = state["attendance_status"]
-                st.session_state.attendance_codes = state["attendance_codes"]
-                st.session_state.attendance_limits = state["attendance_limits"]
-                st.success("Login successful")
+                admin_state = load_admin_state()
+                st.session_state.attendance_status = admin_state.get("attendance_status", {})
+                st.session_state.attendance_codes = admin_state.get("attendance_codes", {})
+                st.session_state.attendance_limits = admin_state.get("attendance_limits", {})
+                st.success("Login successful!")
                 st.rerun()
             else:
                 st.error("Invalid credentials")
         return
 
-    # --- Logout ---
     if st.sidebar.button("Logout Admin"):
         st.session_state.admin_logged_in = False
         st.rerun()
 
-    # --- State Initialization ---
-    for key in ["attendance_status", "attendance_codes", "attendance_limits"]:
-        if key not in st.session_state:
-            st.session_state[key] = {}
+    if "attendance_status" not in st.session_state:
+        st.session_state.attendance_status = {}
+    if "attendance_codes" not in st.session_state:
+        st.session_state.attendance_codes = {}
+    if "attendance_limits" not in st.session_state:
+        st.session_state.attendance_limits = {}
 
-    # --- Classroom Management ---
     st.subheader("Manage Classrooms")
-    col1, col2 = st.columns([3, 1])
+    col1, col2 = st.columns([2, 1])
     with col1:
-        new_class = st.text_input("Enter New Classroom Name (e.g., class_10A)")
+        new_class = st.text_input("Add New Classroom (e.g., class_10A)")
     with col2:
         if st.button("Add Classroom"):
-            if new_class.strip() in get_class_list():
-                st.warning("Classroom already exists.")
+            if not new_class.strip():
+                st.warning("Classroom name cannot be empty.")
+            elif new_class.strip() in get_class_list():
+                st.warning(f"Classroom '{new_class}' already exists.")
             else:
                 create_classroom(new_class.strip())
-                st.success(f"Created classroom {new_class}")
+                st.success(f"Classroom '{new_class}' created.")
                 st.rerun()
 
     class_list = get_class_list()
     if not class_list:
-        st.warning("No classrooms found.")
+        st.warning("No classrooms found. Please add a classroom.")
         return
 
     selected_class = st.selectbox("Select Classroom", class_list)
 
     if st.button("Delete Selected Classroom"):
         delete_classroom(selected_class)
-        st.success(f"Deleted classroom {selected_class}")
+        st.warning(f"Classroom '{selected_class}' deleted.")
         st.rerun()
 
     st.markdown("---")
-    st.subheader(f"Attendance Control for {selected_class}")
 
-    # --- Attendance Control ---
+    st.subheader(f"Attendance Control for '{selected_class}'")
     current_status = st.session_state.attendance_status.get(selected_class, False)
-    st.info(f"Current status: **{'OPEN' if current_status else 'CLOSED'}**")
+    status_text = "OPEN" if current_status else "CLOSED"
+    st.info(f"Current Attendance Status: **{status_text}**")
 
-    col1, col2 = st.columns(2)
-    with col1:
+    col_open, col_close = st.columns(2)
+    with col_open:
         if st.button("Open Attendance"):
             st.session_state.attendance_status[selected_class] = True
             save_admin_state()
             trigger_student_refresh()
-            st.success("Attendance opened")
+            st.success(f"Attendance portal for {selected_class} is OPEN.")
             st.rerun()
-    with col2:
+    with col_close:
         if st.button("Close Attendance"):
             st.session_state.attendance_status[selected_class] = False
             save_admin_state()
             trigger_student_refresh()
-            st.info("Attendance closed")
+            st.info(f"Attendance portal for {selected_class} is CLOSED.")
             st.rerun()
 
-    code = st.text_input("Set Attendance Code", value=st.session_state.attendance_codes.get(selected_class, ""))
-    limit = st.number_input("Set Limit", value=st.session_state.attendance_limits.get(selected_class, 1), min_value=1)
+    current_code = st.session_state.attendance_codes.get(selected_class, "")
+    current_limit = st.session_state.attendance_limits.get(selected_class, 1)
+
+    st.markdown(f"**Current Code:** `{current_code}`")
+    st.markdown(f"**Current Limit:** `{current_limit}`")
+
+    code = st.text_input("Set New Attendance Code", value=current_code)
+    limit = st.number_input("Set Token Limit", min_value=1, value=current_limit, step=1)
 
     if st.button("Update Code & Limit"):
         st.session_state.attendance_codes[selected_class] = code
         st.session_state.attendance_limits[selected_class] = int(limit)
         save_admin_state()
-        st.success("Updated code and limit")
+        st.success(f"Code and token limit updated for {selected_class}")
         st.rerun()
 
     st.markdown("---")
-    st.subheader(f"Attendance Records for {selected_class}")
-
-    try:
-        df = get_attendance_df(selected_class)
-        if df.empty:
-            st.info("No attendance recorded yet.")
-        else:
-            st.dataframe(df)
-            st.download_button("Download CSV", df.to_csv(index=False).encode('utf-8'),
-                               file_name=f"{selected_class}_{datetime.now().date()}.csv", mime="text/csv")
-    except Exception as e:
-        st.error(f"Error loading attendance: {e}")
-
-
-# Run the Admin Panel
-show_admin_panel()
+    st.subheader(f"Attendance for {selected_class}")
+    
+    file_path = os.path.join(CSV_DIR, f"{selected_class}.csv")
+    if os.path.exists(file_path):
+        try:
+            df = pd.read_csv(file_path)
+            if df.empty:
+                st.info("No attendance recorded yet.")
+            else:
+                st.dataframe(df)
+                st.download_button(
+                    "Download Attendance CSV",
+                    df.to_csv(index=False).encode('utf-8'),
+                    file_name=f"attendance_{selected_class}_{datetime.now().strftime('%Y%m%d')}.csv",
+                    mime="text/csv"
+                )
+        except Exception as e:
+            st.error(f"Error reading file: {e}")
+    else:
+        st.warning(f"No file found for {selected_class}.")
