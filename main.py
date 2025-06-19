@@ -1,6 +1,6 @@
 import streamlit as st
 from admin import show_admin_panel
-from student import show_student_panel
+from student import show_student_portal
 import os
 
 # ----- Page Configuration -----
