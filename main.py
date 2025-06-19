@@ -31,4 +31,4 @@ with tab1:
     show_admin_panel()
 
 with tab2:
-    show_student_panel()
+    show_student_portal()
