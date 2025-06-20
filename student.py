@@ -2,82 +2,73 @@ import streamlit as st
 import pandas as pd
 import os
 from datetime import datetime
-import hashlib
 
-CSV_DIR = "class_data"
-os.makedirs(CSV_DIR, exist_ok=True)
+def show_student_panel():
+    st.header("🎓 Student Panel")
 
-# --- Helper Functions ---
-def get_class_list():
-    return [f.replace(".csv", "") for f in os.listdir(CSV_DIR) if f.endswith(".csv")]
+    class_files = [f for f in os.listdir() if f.endswith(".csv") and not f.startswith("streamlit_session")]
 
-def get_file_path(class_name):
-    return os.path.join(CSV_DIR, f"{class_name}.csv")
-
-def validate_code(class_name, code):
-    return st.session_state.attendance_codes.get(class_name, "") == code
-
-def is_portal_open(class_name):
-    return st.session_state.attendance_status.get(class_name, False)
-
-def has_already_marked_attendance(df, roll):
-    return roll in df['Roll Number'].values
-
-def record_attendance(class_name, roll, name):
-    file_path = get_file_path(class_name)
-    df = pd.read_csv(file_path)
-
-    today = datetime.now().strftime("%Y-%m-%d")
-    if today not in df.columns:
-        df[today] = ""
-
-    if roll not in df['Roll Number'].values:
-        new_row = {"Roll Number": roll, "Name": name, today: "Present"}
-        df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
-    else:
-        df.loc[df['Roll Number'] == roll, today] = "Present"
-
-    df.to_csv(file_path, index=False)
-    return True
-
-# --- Streamlit App ---
-def show_student_portal():
-    st.title("Student Attendance Portal")
-
-    if "attendance_status" not in st.session_state:
-        st.session_state.attendance_status = {}
-    if "attendance_codes" not in st.session_state:
-        st.session_state.attendance_codes = {}
-    if "attendance_limits" not in st.session_state:
-        st.session_state.attendance_limits = {}
-
-    class_list = get_class_list()
-    if not class_list:
-        st.warning("No classes available. Please contact your admin.")
+    if not class_files:
+        st.warning("No classes found. Please check with the admin.")
         return
 
-    selected_class = st.selectbox("Select your class", class_list)
+    selected_class = st.selectbox("Select Your Class", [f.replace(".csv", "") for f in class_files])
 
-    roll = st.text_input("Roll Number")
-    name = st.text_input("Name")
-    code = st.text_input("Attendance Code")
+    if not selected_class:
+        st.info("Please select a class to mark attendance.")
+        return
+
+    # Check if attendance is open
+    if selected_class not in st.session_state.attendance_status or not st.session_state.attendance_status[selected_class]:
+        st.warning(f"Attendance for '{selected_class}' is currently CLOSED.")
+        return
+
+    st.success(f"Attendance for '{selected_class}' is OPEN.")
+
+    roll_no = st.text_input("Enter Roll Number")
+    name = st.text_input("Enter Full Name")
+    code = st.text_input("Enter Attendance Code", type="password")
 
     if st.button("Submit Attendance"):
-        if not is_portal_open(selected_class):
-            st.error("Attendance portal is closed for this class.")
+        if not roll_no or not name or not code:
+            st.warning("Please fill all the fields.")
             return
 
-        if not validate_code(selected_class, code):
-            st.error("Invalid attendance code.")
+        expected_code = st.session_state.attendance_codes.get(selected_class, "")
+        if code != expected_code:
+            st.error("Invalid Attendance Code.")
             return
 
-        file_path = get_file_path(selected_class)
-        df = pd.read_csv(file_path)
+        limit = st.session_state.attendance_limits.get(selected_class, 1)
+        file_path = f"{selected_class}.csv"
+        now = datetime.now().strftime("%Y-%m-%d")
 
-        if has_already_marked_attendance(df, roll):
-            st.warning("You have already marked attendance today.")
+        try:
+            df = pd.read_csv(file_path)
+        except Exception:
+            df = pd.DataFrame(columns=["Roll Number", "Name"])
+
+        # Add date column if it doesn’t exist
+        if now not in df.columns:
+            df[now] = ""
+
+        # Check existing entries
+        existing = df[(df["Roll Number"] == roll_no) & (df["Name"] == name)]
+
+        if not existing.empty and df.loc[existing.index[0], now] == "✓":
+            st.info("Attendance already marked.")
+            return
+
+        if len(df[df[now] == "✓"]) >= limit:
+            st.error("Attendance limit reached.")
+            return
+
+        # Mark attendance
+        if existing.empty:
+            new_row = {"Roll Number": roll_no, "Name": name, now: "✓"}
+            df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
         else:
-            if record_attendance(selected_class, roll, name):
-                st.success("Attendance recorded successfully!")
-            else:
-                st.error("Failed to record attendance. Try again.")
+            df.loc[existing.index[0], now] = "✓"
+
+        df.to_csv(file_path, index=False)
+        st.success("Attendance submitted successfully.")
