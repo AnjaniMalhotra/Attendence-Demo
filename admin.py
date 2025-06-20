@@ -1,181 +1,118 @@
 import streamlit as st
 import os
 import pandas as pd
+import requests
 from datetime import datetime
 import pickle
 
-# ---- Admin credentials ----
+# ---- GitHub Configuration ----
+GITHUB_TOKEN = st.secrets["GITHUB_TOKEN"]
+GITHUB_USERNAME = st.secrets["GITHUB_USERNAME"]
+GITHUB_REPO = st.secrets["GITHUB_REPO"]
+BRANCH = "main"  # or use 'main' or the branch name
+
+# ---- Admin Credentials ----
 ADMIN_USERNAME = st.secrets["ADMIN_USERNAME"]
 ADMIN_PASSWORD = st.secrets["ADMIN_PASSWORD"]
 
 STATE_FILE = "streamlit_session.pkl"
-CSV_DIR = "class_data"  # Folder for all classroom CSVs
 
-# Ensure the directory exists
-os.makedirs(CSV_DIR, exist_ok=True)
-
-# ---- Helper Functions ----
-
-def save_admin_state():
-    admin_state = {
-        "attendance_status": st.session_state.attendance_status,
-        "attendance_codes": st.session_state.attendance_codes,
-        "attendance_limits": st.session_state.attendance_limits
+# ---- GitHub Upload Function ----
+def upload_to_github(file_path, repo_path):
+    """Upload a local file to GitHub."""
+    with open(file_path, "rb") as f:
+        content = f.read()
+    
+    api_url = f"https://api.github.com/repos/{GITHUB_USERNAME}/{GITHUB_REPO}/contents/{repo_path}"
+    headers = {
+        "Authorization": f"token {GITHUB_TOKEN}",
+        "Accept": "application/vnd.github.v3+json"
     }
-    with open(STATE_FILE, "wb") as f:
-        pickle.dump(admin_state, f)
 
-def load_admin_state():
-    if os.path.exists(STATE_FILE):
-        try:
-            with open(STATE_FILE, "rb") as f:
-                return pickle.load(f)
-        except Exception as e:
-            st.error(f"Error loading admin state: {e}")
-            return {"attendance_status": {}, "attendance_codes": {}, "attendance_limits": {}}
+    # Check if file exists
+    response = requests.get(api_url, headers=headers)
+    if response.status_code == 200:
+        sha = response.json()['sha']
     else:
-        return {"attendance_status": {}, "attendance_codes": {}, "attendance_limits": {}}
+        sha = None
 
-def get_class_list():
-    return [f.replace(".csv", "") for f in os.listdir(CSV_DIR) if f.endswith(".csv")]
+    commit_msg = f"Upload attendance for {file_path}"
+    data = {
+        "message": commit_msg,
+        "content": content.encode("base64"),
+        "branch": BRANCH
+    }
+    if sha:
+        data["sha"] = sha
 
-def create_classroom(class_name):
-    file_path = os.path.join(CSV_DIR, f"{class_name}.csv")
-    if not os.path.exists(file_path):
-        df = pd.DataFrame(columns=["Roll Number", "Name"])
-        df.to_csv(file_path, index=False)
+    # Send PUT request
+    upload_response = requests.put(api_url, headers=headers, json=data)
+    return upload_response.status_code == 201 or upload_response.status_code == 200
 
-def delete_classroom(class_name):
-    file_path = os.path.join(CSV_DIR, f"{class_name}.csv")
-    if os.path.exists(file_path):
-        os.remove(file_path)
-        st.session_state.attendance_status.pop(class_name, None)
-        st.session_state.attendance_codes.pop(class_name, None)
-        st.session_state.attendance_limits.pop(class_name, None)
-        save_admin_state()
-
-def trigger_student_refresh():
-    with open("refresh_trigger.txt", "w") as f:
-        f.write(datetime.now().isoformat())
-
+# ---- Admin Panel ----
 def show_admin_panel():
-    st.title("Admin Panel")
+    st.title("🧑‍🏫 Admin Panel")
 
+    # Login
     if "admin_logged_in" not in st.session_state:
         st.session_state.admin_logged_in = False
 
     if not st.session_state.admin_logged_in:
-        st.subheader("Admin Login")
         username = st.text_input("Username")
         password = st.text_input("Password", type="password")
         if st.button("Login"):
             if username == ADMIN_USERNAME and password == ADMIN_PASSWORD:
                 st.session_state.admin_logged_in = True
-                admin_state = load_admin_state()
-                st.session_state.attendance_status = admin_state.get("attendance_status", {})
-                st.session_state.attendance_codes = admin_state.get("attendance_codes", {})
-                st.session_state.attendance_limits = admin_state.get("attendance_limits", {})
-                st.success("Login successful!")
+                st.success("Logged in as admin!")
                 st.rerun()
             else:
                 st.error("Invalid credentials")
         return
 
-    if st.sidebar.button("Logout Admin"):
-        st.session_state.admin_logged_in = False
-        st.rerun()
+    # Load attendance state
+    if os.path.exists(STATE_FILE):
+        with open(STATE_FILE, "rb") as f:
+            admin_state = pickle.load(f)
+    else:
+        admin_state = {"attendance_status": {}, "attendance_codes": {}, "attendance_limits": {}}
 
-    if "attendance_status" not in st.session_state:
-        st.session_state.attendance_status = {}
-    if "attendance_codes" not in st.session_state:
-        st.session_state.attendance_codes = {}
-    if "attendance_limits" not in st.session_state:
-        st.session_state.attendance_limits = {}
+    for key in ["attendance_status", "attendance_codes", "attendance_limits"]:
+        if key not in st.session_state:
+            st.session_state[key] = admin_state.get(key, {})
 
+    # Add new class
     st.subheader("Manage Classrooms")
-    col1, col2 = st.columns([2, 1])
-    with col1:
-        new_class = st.text_input("Add New Classroom (e.g., class_10A)")
-    with col2:
-        if st.button("Add Classroom"):
-            if not new_class.strip():
-                st.warning("Classroom name cannot be empty.")
-            elif new_class.strip() in get_class_list():
-                st.warning(f"Classroom '{new_class}' already exists.")
-            else:
-                create_classroom(new_class.strip())
+    new_class = st.text_input("Create New Class", key="new_class")
+    if st.button("Create Classroom"):
+        if new_class:
+            filename = f"{new_class}.csv"
+            if not os.path.exists(filename):
+                df = pd.DataFrame(columns=["Roll Number", "Name"])
+                df.to_csv(filename, index=False)
                 st.success(f"Classroom '{new_class}' created.")
                 st.rerun()
+            else:
+                st.warning("Class already exists!")
 
-    class_list = get_class_list()
-    if not class_list:
-        st.warning("No classrooms found. Please add a classroom.")
+    # Select class
+    classes = [f.replace(".csv", "") for f in os.listdir() if f.endswith(".csv")]
+    if not classes:
+        st.info("No classes yet.")
         return
 
-    selected_class = st.selectbox("Select Classroom", class_list)
+    selected_class = st.selectbox("Select Class", classes)
 
-    if st.button("Delete Selected Classroom"):
-        delete_classroom(selected_class)
-        st.warning(f"Classroom '{selected_class}' deleted.")
-        st.rerun()
+    # View attendance
+    df = pd.read_csv(f"{selected_class}.csv")
+    st.dataframe(df)
 
-    st.markdown("---")
+    # Upload to GitHub
+    if st.button("Upload Attendance to GitHub"):
+        today = datetime.now().strftime("%Y-%m-%d")
+        local_file = f"{selected_class}.csv"
+        github_file_path = f"attendance/{selected_class}_{today}.csv"
 
-    st.subheader(f"Attendance Control for '{selected_class}'")
-    current_status = st.session_state.attendance_status.get(selected_class, False)
-    status_text = "OPEN" if current_status else "CLOSED"
-    st.info(f"Current Attendance Status: **{status_text}**")
-
-    col_open, col_close = st.columns(2)
-    with col_open:
-        if st.button("Open Attendance"):
-            st.session_state.attendance_status[selected_class] = True
-            save_admin_state()
-            trigger_student_refresh()
-            st.success(f"Attendance portal for {selected_class} is OPEN.")
-            st.rerun()
-    with col_close:
-        if st.button("Close Attendance"):
-            st.session_state.attendance_status[selected_class] = False
-            save_admin_state()
-            trigger_student_refresh()
-            st.info(f"Attendance portal for {selected_class} is CLOSED.")
-            st.rerun()
-
-    current_code = st.session_state.attendance_codes.get(selected_class, "")
-    current_limit = st.session_state.attendance_limits.get(selected_class, 1)
-
-    st.markdown(f"**Current Code:** `{current_code}`")
-    st.markdown(f"**Current Limit:** `{current_limit}`")
-
-    code = st.text_input("Set New Attendance Code", value=current_code)
-    limit = st.number_input("Set Token Limit", min_value=1, value=current_limit, step=1)
-
-    if st.button("Update Code & Limit"):
-        st.session_state.attendance_codes[selected_class] = code
-        st.session_state.attendance_limits[selected_class] = int(limit)
-        save_admin_state()
-        st.success(f"Code and token limit updated for {selected_class}")
-        st.rerun()
-
-    st.markdown("---")
-    st.subheader(f"Attendance for {selected_class}")
-    
-    file_path = os.path.join(CSV_DIR, f"{selected_class}.csv")
-    if os.path.exists(file_path):
-        try:
-            df = pd.read_csv(file_path)
-            if df.empty:
-                st.info("No attendance recorded yet.")
-            else:
-                st.dataframe(df)
-                st.download_button(
-                    "Download Attendance CSV",
-                    df.to_csv(index=False).encode('utf-8'),
-                    file_name=f"attendance_{selected_class}_{datetime.now().strftime('%Y%m%d')}.csv",
-                    mime="text/csv"
-                )
-        except Exception as e:
-            st.error(f"Error reading file: {e}")
-    else:
-        st.warning(f"No file found for {selected_class}.")
+        if upload_to_github(local_file, github_file_path):
+            st.success(f"Uploaded to GitHub as {github_file_path}")
+        else:
+            st.error("Upload failed. Check token/repo permissions.")
