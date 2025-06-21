@@ -117,13 +117,13 @@ def show_admin_panel():
         st.info("No attendance records found.")
     else:
         df_matrix = pd.DataFrame(records)
-        df_matrix["status"] = "✅"
+        df_matrix["status"] = "✓"
         pivot_df = df_matrix.pivot_table(
             index=["roll_number", "name"],
             columns="date",
             values="status",
             aggfunc="first",
-            fill_value="❌"
+            fill_value="x"
         ).reset_index()
 
         pivot_df.columns.name = None
