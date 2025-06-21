@@ -1,4 +1,5 @@
-# main.py
+# ---------- ✅ main.py (Tabbed Version for Admin and Student) ----------
+
 import streamlit as st
 from admin import show_admin_panel
 from student import show_student_panel
@@ -19,10 +20,10 @@ if not os.path.exists(REFRESH_FILE):
         f.write("init")
 
 # ----- App Title -----
-st.title("\U0001F4D8 Smart Attendance System")
+st.title("📘 Smart Attendance System")
 
 # ----- Tabs for Role-Based Panels -----
-tab1, tab2 = st.tabs(["\U0001F9D1‍\U0001F3EB Admin Panel", "🎓 Student Panel"])
+tab1, tab2 = st.tabs(["🧑‍🏫 Admin Panel", "🎓 Student Panel"])
 
 with tab1:
     show_admin_panel()
