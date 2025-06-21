@@ -1,18 +1,24 @@
-# ---------- ✅ main.py (Supabase + Streamlit Attendance App) ----------
+# ---------- ✅ main.py (Supabase + Streamlit + Tabs UI) ----------
 
 import streamlit as st
 from admin import show_admin_panel
 from student import show_student_panel
 
-st.set_page_config(page_title="Supabase Attendance System", layout="centered")
+# Page Config
+st.set_page_config(
+    page_title="Smart Attendance System",
+    layout="centered",
+    page_icon="🧠"
+)
 
-# Sidebar Navigation
-st.sidebar.title("📚 Navigation")
-mode = st.sidebar.radio("Choose Mode", ["Student Panel", "Admin Panel"])
-
+# App Title
 st.title("🧠 Smart Attendance System (Supabase)")
 
-if mode == "Admin Panel":
+# Role Tabs
+admin_tab, student_tab = st.tabs(["🧑‍🏫 Admin Panel", "🎓 Student Panel"])
+
+with admin_tab:
     show_admin_panel()
-else:
+
+with student_tab:
     show_student_panel()
