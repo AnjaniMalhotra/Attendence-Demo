@@ -137,6 +137,19 @@ def show_admin_panel():
             file_name=f"{selected_class}_attendance_matrix.csv",
             mime='text/csv'
         )
+        
+        # Push to GitHub
+        if st.button("🚀 Push Matrix to GitHub"):
+            filename = f"attendance_matrix_{selected_class}_{datetime.now(IST).strftime('%Y%m%d_%H%M%S')}.csv"
+            content = pivot_df.to_csv(index=False)
+            repo_path = f"records/{filename}"
+            try:
+                repo.create_file(repo_path, f"Add matrix attendance for {selected_class}", content, branch="main")
+                st.success(f"✅ Matrix file pushed to GitHub: {repo_path}")
+            except Exception as e:
+                st.warning(f"⚠️ GitHub push failed: {e}")
+                
+        # Delete classroom
         st.markdown("---")
         st.subheader("🗑️ Permanently Delete Class")
         st.warning("⚠️ This will delete all attendance and student data for this class permanently. This action is irreversible.")
@@ -152,13 +165,3 @@ def show_admin_panel():
                 st.rerun()
             else:
                 st.warning("⚠️ Please type `DELETE` exactly to confirm deletion.")
-        # Push to GitHub
-        if st.button("🚀 Push Matrix to GitHub"):
-            filename = f"attendance_matrix_{selected_class}_{datetime.now(IST).strftime('%Y%m%d_%H%M%S')}.csv"
-            content = pivot_df.to_csv(index=False)
-            repo_path = f"records/{filename}"
-            try:
-                repo.create_file(repo_path, f"Add matrix attendance for {selected_class}", content, branch="main")
-                st.success(f"✅ Matrix file pushed to GitHub: {repo_path}")
-            except Exception as e:
-                st.warning(f"⚠️ GitHub push failed: {e}")
