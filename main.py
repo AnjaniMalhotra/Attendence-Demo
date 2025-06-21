@@ -1,15 +1,34 @@
-# ---------- ✅ main.py (Sidebar Version - Fully Compatible) ----------
+# ---------- ✅ main.py (Final Version with Enhanced State Initialization) ----------
 
 import streamlit as st
 from admin import show_admin_panel
 from student import show_student_panel
 import os
+import pickle
 
 # ----- Page Configuration -----
 st.set_page_config(page_title="Smart Attendance System", layout="centered")
 
-# ----- Initialize Shared Session State -----
-for key in ["attendance_status", "attendance_codes", "attendance_limits"]:
+# ----- State File and Shared Keys -----
+STATE_FILE = "streamlit_session.pkl"
+shared_keys = [
+    "attendance_status",
+    "attendance_codes",
+    "attendance_limits",
+    "submitted_rolls",
+    "roll_name_map"
+]
+
+# ----- Load Persistent State from Pickle File if Exists -----
+if os.path.exists(STATE_FILE):
+    with open(STATE_FILE, "rb") as f:
+        loaded_state = pickle.load(f)
+    for key in shared_keys:
+        if key in loaded_state:
+            st.session_state[key] = loaded_state[key]
+
+# ----- Ensure State Keys Exist in Session -----
+for key in shared_keys:
     if key not in st.session_state:
         st.session_state[key] = {}
 
