@@ -1,5 +1,3 @@
-# ---------- ✅ admin.py (Supabase + Timezone Safe + Proxy-Proof) ----------
-
 import streamlit as st
 from datetime import datetime
 import pandas as pd
@@ -110,28 +108,52 @@ def show_admin_panel():
         st.success("Updated successfully.")
         st.rerun()
 
-    # Attendance log for current class
+    # Regular attendance log
     st.markdown("### 📊 Attendance Logs")
-    today = current_ist_date()
     records = supabase.table("attendance").select("*") \
         .eq("class_name", selected_class).order("date", desc=True).execute().data
 
     if not records:
         st.info("No attendance records found.")
-        return
+    else:
+        df = pd.DataFrame(records)
+        df = df[["date", "roll_number", "name"]]
+        df.columns = ["Date", "Roll Number", "Name"]
+        st.dataframe(df)
 
-    df = pd.DataFrame(records)
-    df = df[["date", "roll_number", "name"]]
-    df.columns = ["Date", "Roll Number", "Name"]
-    st.dataframe(df)
+        if st.button("⬇️ Export & Push to GitHub"):
+            filename = f"attendance_{selected_class}_{datetime.now(IST).strftime('%Y%m%d_%H%M%S')}.csv"
+            content = df.to_csv(index=False)
+            repo_path = f"records/{filename}"
+            try:
+                repo.create_file(repo_path, f"Add attendance for {selected_class}", content, branch="main")
+                st.success(f"✅ File pushed to GitHub: {repo_path}")
+            except Exception as e:
+                st.warning(f"⚠️ GitHub push failed: {e}")
 
-    # Export and push
-    if st.button("⬇️ Export & Push to GitHub"):
-        filename = f"attendance_{selected_class}_{datetime.now(IST).strftime('%Y%m%d_%H%M%S')}.csv"
-        content = df.to_csv(index=False)
-        repo_path = f"records/{filename}"
-        try:
-            repo.create_file(repo_path, f"Add attendance for {selected_class}", content, branch="main")
-            st.success(f"✅ File pushed to GitHub: {repo_path}")
-        except Exception as e:
-            st.warning(f"⚠️ GitHub push failed: {e}")
+    # Attendance Matrix View (pivoted)
+    st.markdown("### 🧾 Attendance Sheet (Matrix View)")
+
+    if records:
+        df_matrix = pd.DataFrame(records)
+        df_matrix["status"] = "✅"  # Present entries
+        pivot_df = df_matrix.pivot_table(
+            index=["roll_number", "name"],
+            columns="date",
+            values="status",
+            aggfunc="first",
+            fill_value="❌"
+        ).reset_index()
+
+        pivot_df.columns.name = None  # Remove column index name
+        st.dataframe(pivot_df, use_container_width=True)
+
+        if st.button("⬇️ Export Matrix & Push to GitHub"):
+            filename = f"attendance_matrix_{selected_class}_{datetime.now(IST).strftime('%Y%m%d_%H%M%S')}.csv"
+            content = pivot_df.to_csv(index=False)
+            repo_path = f"records/{filename}"
+            try:
+                repo.create_file(repo_path, f"Add matrix attendance for {selected_class}", content, branch="main")
+                st.success(f"✅ Matrix file pushed to GitHub: {repo_path}")
+            except Exception as e:
+                st.warning(f"⚠️ GitHub push failed: {e}")
