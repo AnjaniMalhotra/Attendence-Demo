@@ -1,7 +1,5 @@
 streamlit
-pandas
-requests
-python-dotenv
-PyGithub==1.59.1
+supabase
+pytz
 
 
