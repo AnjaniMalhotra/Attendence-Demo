@@ -121,7 +121,7 @@ def show_admin_panel():
         return
 
     df = pd.DataFrame(records)
-    df = df[["date", "roll_number", "name"]]
+    df = df[["roll_number", "name", "date"]]
     df.columns = ["Roll Number", "Name", "Date"]
     st.dataframe(df)
 
