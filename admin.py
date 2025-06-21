@@ -75,7 +75,6 @@ def show_admin_panel():
     selected_class = st.selectbox("Select a Class", [c["class_name"] for c in classes], key="select_class")
     selected_config = next(c for c in classes if c["class_name"] == selected_class)
 
-    # Ensure only one class is open
     other_open_classes = [c["class_name"] for c in classes if c["is_open"] and c["class_name"] != selected_class]
 
     st.subheader(f"🕹️ Attendance Control: `{selected_class}`")
@@ -96,13 +95,19 @@ def show_admin_panel():
             st.success("Attendance portal closed.")
             st.rerun()
     with col3:
-        if st.button("🗑️ Delete Class"):
-            confirm = st.text_input("Type DELETE to confirm", key="delete_confirm")
-            if confirm == "DELETE":
+        st.markdown("### 🗑️ Permanently Delete Class")
+        st.warning("⚠️ This will delete all attendance and student data for this class permanently.")
+        confirm = st.text_input("Type `DELETE` to confirm", key="delete_confirm")
+
+        if st.button("❌ Delete Class Permanently"):
+            if confirm.strip() == "DELETE":
                 supabase.table("attendance").delete().eq("class_name", selected_class).execute()
+                supabase.table("roll_map").delete().eq("class_name", selected_class).execute()
                 supabase.table("classroom_settings").delete().eq("class_name", selected_class).execute()
-                st.success(f"Class '{selected_class}' and its attendance records deleted.")
+                st.success(f"✅ Classroom '{selected_class}' and all its records have been permanently deleted.")
                 st.rerun()
+            else:
+                st.warning("⚠️ Please type `DELETE` exactly to confirm deletion.")
 
     # Update code & limit
     st.markdown("### 🔐 Update Attendance Code & Limit")
@@ -116,7 +121,7 @@ def show_admin_panel():
         st.success("Updated successfully.")
         st.rerun()
 
-    # Matrix Attendance View Only
+    # Matrix Attendance View
     st.markdown("### 🧾 Attendance Sheet (Matrix View)")
 
     records = supabase.table("attendance").select("*") \
@@ -138,7 +143,7 @@ def show_admin_panel():
         pivot_df.columns.name = None
         st.dataframe(pivot_df, use_container_width=True)
 
-        # Export to CSV locally
+        # Download locally
         csv = pivot_df.to_csv(index=False).encode('utf-8')
         st.download_button(
             label="⬇️ Download CSV",
