@@ -58,23 +58,31 @@ def show_admin_panel():
         return
 
     # --- Create New Class ---
-    st.subheader("📂 Create New Classroom")
-    new_class = st.text_input("Class Name")
-    if st.button("Create Classroom"):
-        if new_class.strip():
-            try:
-                table_name = f"attendance_{new_class.replace(' ', '_')}"
-                supabase.table("classroom_settings").insert({
-                    "class_name": new_class,
-                    "is_open": False,
-                    "code": "",
-                    "limit": 1
-                }).execute()
-                supabase.rpc("create_attendance_table", {"table_name": table_name}).execute()
-                st.success(f"✅ Classroom '{new_class}' created.")
-                st.rerun()
-            except Exception as e:
-                st.error(f"Error creating classroom: {e}")
+    # --- Create New Class ---
+st.subheader("📂 Create New Classroom")
+new_class = st.text_input("Class Name")
+
+if st.button("Create Classroom"):
+    if new_class.strip():
+        try:
+            table_name = f"attendance_{new_class.replace(' ', '_')}"
+            
+            # Insert into classroom_settings
+            supabase.table("classroom_settings").insert({
+                "class_name": new_class,
+                "is_open": False,
+                "code": "",
+                "limit": 1
+            }).execute()
+            
+            # RPC to create table automatically
+            supabase.rpc("create_attendance_table", {"table_name": table_name}).execute()
+            
+            st.success(f"✅ Classroom '{new_class}' created and table '{table_name}' initialized.")
+            st.rerun()
+        except Exception as e:
+            st.error(f"Error creating classroom: {e}")
+
 
     # --- View & Manage Classrooms ---
     class_data = supabase.table("classroom_settings").select("*").execute().data
