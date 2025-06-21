@@ -108,28 +108,6 @@ def show_admin_panel():
         st.success("Updated successfully.")
         st.rerun()
 
-    # Regular attendance log
-    st.markdown("### 📊 Attendance Logs")
-    records = supabase.table("attendance").select("*") \
-        .eq("class_name", selected_class).order("date", desc=True).execute().data
-
-    if not records:
-        st.info("No attendance records found.")
-    else:
-        df = pd.DataFrame(records)
-        df = df[["date", "roll_number", "name"]]
-        df.columns = ["Date", "Roll Number", "Name"]
-        st.dataframe(df)
-
-        if st.button("⬇️ Export & Push to GitHub"):
-            filename = f"attendance_{selected_class}_{datetime.now(IST).strftime('%Y%m%d_%H%M%S')}.csv"
-            content = df.to_csv(index=False)
-            repo_path = f"records/{filename}"
-            try:
-                repo.create_file(repo_path, f"Add attendance for {selected_class}", content, branch="main")
-                st.success(f"✅ File pushed to GitHub: {repo_path}")
-            except Exception as e:
-                st.warning(f"⚠️ GitHub push failed: {e}")
 
     # Attendance Matrix View (pivoted)
     st.markdown("### 🧾 Attendance Sheet (Matrix View)")
