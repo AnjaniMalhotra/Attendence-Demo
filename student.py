@@ -1,110 +1,117 @@
-# ---------- ✅ student.py (Proxy-Proof, Key-Safe, Timezone IST) ----------
+# ---------- ✅ student.py (Supabase + Proxy-Proof + Timezone Safe) ----------
 
 import streamlit as st
-import pandas as pd
-import os
 from datetime import datetime
 import pytz
-from supabase import create_client
-from dotenv import load_dotenv
+from supabase import create_client, Client
+import pandas as pd
 
-# Load Supabase credentials
-load_dotenv()
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY")
-supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
-
-# IST time
+# ---------- 🧠 Config ----------
 IST = pytz.timezone("Asia/Kolkata")
 def current_ist_date():
     return datetime.now(IST).strftime("%Y-%m-%d")
 
-def show_student_panel():
-    st.title("🎓 Student Attendance")
+# ---------- 🔐 Supabase Setup ----------
+url = st.secrets["SUPABASE_URL"]
+key = st.secrets["SUPABASE_KEY"]
+supabase: Client = create_client(url, key)
 
-    # Get available classes
-    res = supabase.table("classroom_settings").select("class_name").execute()
-    class_list = [row["class_name"] for row in res.data]
+# ---------- 🎓 Student Portal ----------
+st.title("🎓 Student Attendance Portal")
 
-    if not class_list:
-        st.warning("No classrooms available.")
-        return
+# 🔍 Get only OPEN classrooms
+open_classes_response = supabase.table("classroom_settings").select("class_name").eq("is_open", True).execute()
+class_list = [entry["class_name"] for entry in open_classes_response.data]
 
-    selected_class = st.selectbox("Select Your Class", class_list, key="class_selector")
+if not class_list:
+    st.warning("🚫 No classrooms are currently open for attendance.")
+    st.stop()
 
-    # Fetch classroom config
-    config = supabase.table("classroom_settings").select("*").eq("class_name", selected_class).single().execute().data
+selected_class = st.selectbox("Select Your Class", class_list)
 
-    if not config["is_open"]:
-        st.error(f"Attendance for '{selected_class}' is currently CLOSED.")
-        return
+# 🧩 Fetch settings for selected class
+settings = (
+    supabase.table("classroom_settings")
+    .select("code", "daily_limit")
+    .eq("class_name", selected_class)
+    .execute()
+    .data[0]
+)
+required_code = settings["code"]
+daily_limit = settings["daily_limit"]
 
-    attendance_code = config["code"]
-    daily_limit = config["daily_limit"]
+# 🧠 Roll number input
+roll_number = st.text_input("Roll Number")
 
-    # Input fields
-    roll_number = st.text_input("Roll Number", key="roll_input")
-    name_input = st.text_input("Name", key="name_input")
-    code_input = st.text_input("Attendance Code", key="code_input")
+# 🔒 Fetch locked name for roll number (if exists)
+roll_map_response = (
+    supabase.table("roll_map")
+    .select("name")
+    .eq("class_name", selected_class)
+    .eq("roll_number", roll_number)
+    .execute()
+)
 
-    # Auto-fetch previous name if roll already exists
-    name_db = supabase.table("roll_map").select("*").eq("class_name", selected_class).eq("roll_number", roll_number).execute().data
-    if name_db:
-        locked_name = name_db[0]["name"]
-        st.info(f"✅ Name auto-filled for Roll {roll_number}: {locked_name}")
-        name = locked_name
-    else:
-        name = name_input
+if roll_map_response.data:
+    locked_name = roll_map_response.data[0]["name"]
+    st.info(f"🔒 Name auto-filled for Roll {roll_number}: **{locked_name}**")
+    name = locked_name
+else:
+    name = st.text_input("Name (Will be locked after first time)")
 
-    if st.button("📌 Submit Attendance", key="submit_button"):
-        if code_input != attendance_code:
-            st.error("❌ Invalid Code.")
-            return
+code_input = st.text_input("Attendance Code")
 
-        # Check if already marked today
-        existing = supabase.table("attendance").select("*") \
-            .eq("class_name", selected_class) \
-            .eq("roll_number", roll_number) \
-            .eq("date", current_ist_date()) \
-            .execute().data
+if st.button("✅ Submit Attendance"):
+    # 🔐 Check code
+    if code_input != required_code:
+        st.error("❌ Incorrect attendance code.")
+        st.stop()
 
-        if existing:
-            st.error("❌ Attendance already submitted for today.")
-            return
+    # 🔁 Check if already submitted today
+    today = current_ist_date()
+    existing = (
+        supabase.table("attendance")
+        .select("*")
+        .eq("class_name", selected_class)
+        .eq("roll_number", roll_number)
+        .eq("date", today)
+        .execute()
+        .data
+    )
+    if existing:
+        st.error("❌ Attendance already marked today.")
+        st.stop()
 
-        # Enforce name locking
-        if name_db and name_input and name_input != name_db[0]["name"]:
-            st.error("❌ Name mismatch with registered roll number.")
-            return
+    # 🔁 Check daily limit
+    attendance_today = (
+        supabase.table("attendance")
+        .select("*", count="exact")
+        .eq("class_name", selected_class)
+        .eq("date", today)
+        .execute()
+    )
+    if attendance_today.count >= daily_limit:
+        st.warning("⚠️ Attendance limit for today has been reached.")
+        st.stop()
 
-        if not name:
-            st.error("❌ Name is required.")
-            return
-
-        # Check limit
-        today_count = supabase.table("attendance").select("id", count="exact") \
-            .eq("class_name", selected_class) \
-            .eq("date", current_ist_date()) \
-            .execute().count
-
-        if today_count >= daily_limit:
-            st.warning("⚠️ Attendance limit reached.")
-            return
-
-        # Save name lock if first time
-        if not name_db:
-            supabase.table("roll_map").insert({
-                "class_name": selected_class,
-                "roll_number": roll_number,
-                "name": name
-            }).execute()
-
-        # Save attendance
-        supabase.table("attendance").insert({
+    # 🔒 Lock roll_number to name if new
+    if not roll_map_response.data:
+        supabase.table("roll_map").insert({
             "class_name": selected_class,
             "roll_number": roll_number,
-            "name": name,
-            "date": current_ist_date()
+            "name": name
         }).execute()
+    else:
+        if roll_map_response.data[0]["name"] != name:
+            st.error("❌ Roll number already locked to a different name.")
+            st.stop()
 
-        st.success("✅ Attendance marked successfully!")
+    # ✅ Submit Attendance
+    supabase.table("attendance").insert({
+        "class_name": selected_class,
+        "roll_number": roll_number,
+        "name": name,
+        "date": today
+    }).execute()
+
+    st.success("✅ Attendance submitted successfully!")
