@@ -25,8 +25,8 @@ GITHUB_TOKEN = st.secrets["GITHUB_TOKEN"]
 GITHUB_USERNAME = st.secrets["GITHUB_USERNAME"]
 GITHUB_REPO = st.secrets["GITHUB_REPO"]
 
+# --- GitHub Push ---
 def push_to_github(df, class_name):
-    from datetime import datetime
     g = Github(GITHUB_TOKEN)
     repo = g.get_user(GITHUB_USERNAME).get_repo(GITHUB_REPO)
     file_name = f"attendance_{class_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
@@ -58,31 +58,28 @@ def show_admin_panel():
         return
 
     # --- Create New Class ---
-    # --- Create New Class ---
-st.subheader("📂 Create New Classroom")
-new_class = st.text_input("Class Name")
-
-if st.button("Create Classroom"):
-    if new_class.strip():
-        try:
-            table_name = f"attendance_{new_class.replace(' ', '_')}"
-            
-            # Insert into classroom_settings
-            supabase.table("classroom_settings").insert({
-                "class_name": new_class,
-                "is_open": False,
-                "code": "",
-                "limit": 1
-            }).execute()
-            
-            # RPC to create table automatically
-            supabase.rpc("create_attendance_table", {"table_name": table_name}).execute()
-            
-            st.success(f"✅ Classroom '{new_class}' created and table '{table_name}' initialized.")
-            st.rerun()
-        except Exception as e:
-            st.error(f"Error creating classroom: {e}")
-
+    st.subheader("📂 Create New Classroom")
+    new_class = st.text_input("Class Name")
+    if st.button("Create Classroom"):
+        if new_class.strip():
+            try:
+                table_name = f"attendance_{new_class.replace(' ', '_')}"
+                
+                # 1. Add to classroom_settings
+                supabase.table("classroom_settings").insert({
+                    "class_name": new_class,
+                    "is_open": False,
+                    "code": "",
+                    "limit": 1
+                }).execute()
+                
+                # 2. Create attendance table using Supabase RPC
+                supabase.rpc("create_attendance_table", {"table_name": table_name}).execute()
+                
+                st.success(f"✅ Classroom '{new_class}' created and attendance table initialized.")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Error creating classroom: {e}")
 
     # --- View & Manage Classrooms ---
     class_data = supabase.table("classroom_settings").select("*").execute().data
@@ -113,7 +110,7 @@ if st.button("Create Classroom"):
     limit = st.number_input("Limit", value=class_info.get("limit", 1), min_value=1)
     if st.button("Update Code & Limit"):
         supabase.table("classroom_settings").update({"code": code, "limit": limit}).eq("class_name", selected_class).execute()
-        st.success("Updated")
+        st.success("✅ Updated successfully.")
 
     # --- Delete Class ---
     if st.button("🗑️ Delete Class"):
@@ -125,7 +122,7 @@ if st.button("Create Classroom"):
         except Exception as e:
             st.error(f"Failed to delete class: {e}")
 
-    # --- View Attendance (Pivot) ---
+    # --- View Attendance (Pivot Table) ---
     st.markdown("### 📊 Attendance Records")
     try:
         records = supabase.table(table_name).select("*").execute().data
@@ -136,6 +133,7 @@ if st.button("Create Classroom"):
         df = pd.DataFrame(records)
         df = df[["roll_number", "name", "date"]]
 
+        # Pivot: Rows = Roll & Name, Columns = Dates
         pivot_df = df.pivot_table(index=["roll_number", "name"], columns="date", aggfunc="size", fill_value=0)
         pivot_df = pivot_df.replace(1, "✔️").replace(0, "")
         pivot_df = pivot_df.reset_index()
