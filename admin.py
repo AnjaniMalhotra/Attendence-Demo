@@ -6,14 +6,14 @@ def show_admin_panel():
 
     class_name = st.text_input("Enter Class Name")
     code = st.text_input("Set Attendance Code")
-    limit = st.number_input("Set Daily Limit", min_value=1, value=10)
+    daily_limit = st.number_input("Set Daily Limit", min_value=1, value=10)
     status = st.selectbox("Attendance Status", ["Open", "Closed"])
 
     if st.button("Save / Update Classroom"):
         supabase.table("classroom_settings").upsert({
             "class_name": class_name,
             "code": code,
-            "limit": limit,
+            "daily_limit": daily_limit,
             "status": status == "Open"
         }).execute()
         st.success("✅ Classroom settings saved.")
