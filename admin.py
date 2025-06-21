@@ -44,15 +44,20 @@ def show_admin_panel():
     st.subheader("📂 Manage Classrooms")
     class_name = st.text_input("Enter New Classroom Name")
     if st.button("Create Classroom"):
-        table_name = f"attendance_{class_name}"
+        table_name = f"attendance_{class_name.replace(' ', '_')}"
         try:
+            # Insert to classroom settings
             supabase.table("classroom_settings").insert({
                 "class_name": class_name,
                 "is_open": False,
                 "code": "",
                 "limit": 1
             }).execute()
-            st.success(f"Classroom '{class_name}' created")
+
+            # Create attendance table using Supabase RPC (must be defined in SQL)
+            supabase.rpc("create_attendance_table", {"table_name": table_name}).execute()
+
+            st.success(f"Classroom '{class_name}' created with table '{table_name}'")
         except Exception as e:
             st.error(f"Failed to create: {e}")
         st.rerun()
@@ -92,7 +97,7 @@ def show_admin_panel():
 
     # Attendance Records (Pivot View)
     st.markdown("### 📊 Attendance Records (Pivot View)")
-    table_name = f"attendance_{selected_class}"
+    table_name = f"attendance_{selected_class.replace(' ', '_')}"
     try:
         records = supabase.table(table_name).select("*").execute().data
         if not records:
