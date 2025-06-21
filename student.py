@@ -1,74 +1,90 @@
+# ---------- ✅ student.py (Updated to handle timezone, name-locking, persistent state) ----------
+
 import streamlit as st
 import pandas as pd
 import os
+import pickle
 from datetime import datetime
+import pytz
 
-def show_student_panel():
-    st.header("🎓 Student Panel")
+STATE_FILE = "streamlit_session.pkl"
+IST = pytz.timezone('Asia/Kolkata')
 
-    class_files = [f for f in os.listdir() if f.endswith(".csv") and not f.startswith("streamlit_session")]
+def current_ist_date():
+    return datetime.now(IST).strftime("%Y-%m-%d")
 
-    if not class_files:
-        st.warning("No classes found. Please check with the admin.")
-        return
+def load_admin_state():
+    if os.path.exists(STATE_FILE):
+        with open(STATE_FILE, "rb") as f:
+            return pickle.load(f)
+    return {
+        "attendance_status": {},
+        "attendance_codes": {},
+        "attendance_limits": {},
+        "submitted_rolls": {},
+        "roll_name_map": {},
+    }
 
-    selected_class = st.selectbox("Select Your Class", [f.replace(".csv", "") for f in class_files])
+# Load persistent state
+admin_state = load_admin_state()
+for key in admin_state:
+    st.session_state[key] = admin_state[key]
 
-    if not selected_class:
-        st.info("Please select a class to mark attendance.")
-        return
+st.title("🎓 Student Attendance")
 
-    # Check if attendance is open
-    if selected_class not in st.session_state.attendance_status or not st.session_state.attendance_status[selected_class]:
-        st.warning(f"Attendance for '{selected_class}' is currently CLOSED.")
-        return
+class_list = [f.replace(".csv", "") for f in os.listdir() if f.endswith(".csv") and f != STATE_FILE.replace(".pkl", ".csv")]
+if not class_list:
+    st.warning("No classrooms available.")
+    st.stop()
 
-    st.success(f"Attendance for '{selected_class}' is OPEN.")
+selected_class = st.selectbox("Select Your Class", class_list)
+attendance_open = st.session_state.attendance_status.get(selected_class, False)
 
-    roll_no = st.text_input("Enter Roll Number")
-    name = st.text_input("Enter Full Name")
-    code = st.text_input("Enter Attendance Code", type="password")
+if not attendance_open:
+    st.error(f"Attendance for '{selected_class}' is currently CLOSED.")
+    st.stop()
 
-    if st.button("Submit Attendance"):
-        if not roll_no or not name or not code:
-            st.warning("Please fill all the fields.")
-            return
+code_required = st.session_state.attendance_codes.get(selected_class, "")
+limit = st.session_state.attendance_limits.get(selected_class, 1)
+submitted_rolls = st.session_state.submitted_rolls.get(selected_class, set())
+roll_name_map = st.session_state.roll_name_map.get(selected_class, {})
 
-        expected_code = st.session_state.attendance_codes.get(selected_class, "")
-        if code != expected_code:
-            st.error("Invalid Attendance Code.")
-            return
+roll_number = st.text_input("Roll Number")
+name = ""
+if roll_number in roll_name_map:
+    name = roll_name_map[roll_number]
+    st.info(f"📝 Name auto-filled for roll {roll_number}: {name}")
+else:
+    name = st.text_input("Name")
 
-        limit = st.session_state.attendance_limits.get(selected_class, 1)
+code_input = st.text_input("Enter Attendance Code")
+
+if st.button("Submit Attendance"):
+    if code_input != code_required:
+        st.error("❌ Invalid Code.")
+    elif roll_number in submitted_rolls:
+        st.error("❌ Roll number already submitted.")
+    elif roll_number in roll_name_map and roll_name_map[roll_number] != name:
+        st.error("❌ This roll number is already assigned to a different name.")
+    elif not name:
+        st.error("❌ Name is required.")
+    else:
         file_path = f"{selected_class}.csv"
-        now = datetime.now().strftime("%Y-%m-%d")
-
-        try:
-            df = pd.read_csv(file_path)
-        except Exception:
-            df = pd.DataFrame(columns=["Roll Number", "Name"])
-
-        # Add date column if it doesn’t exist
-        if now not in df.columns:
-            df[now] = ""
-
-        # Check existing entries
-        existing = df[(df["Roll Number"] == roll_no) & (df["Name"] == name)]
-
-        if not existing.empty and df.loc[existing.index[0], now] == "✓":
-            st.info("Attendance already marked.")
-            return
-
-        if len(df[df[now] == "✓"]) >= limit:
-            st.error("Attendance limit reached.")
-            return
-
-        # Mark attendance
-        if existing.empty:
-            new_row = {"Roll Number": roll_no, "Name": name, now: "✓"}
-            df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
+        df = pd.read_csv(file_path)
+        if len(df[df['Date'] == current_ist_date()]) >= limit:
+            st.warning("⚠️ Attendance limit reached for today.")
         else:
-            df.loc[existing.index[0], now] = "✓"
+            new_entry = pd.DataFrame([[current_ist_date(), roll_number, name]], columns=["Date", "Roll Number", "Name"])
+            df = pd.concat([df, new_entry], ignore_index=True)
+            df.to_csv(file_path, index=False)
 
-        df.to_csv(file_path, index=False)
-        st.success("Attendance submitted successfully.")
+            # Update state
+            submitted_rolls.add(roll_number)
+            st.session_state.submitted_rolls[selected_class] = submitted_rolls
+            roll_name_map[roll_number] = name
+            st.session_state.roll_name_map[selected_class] = roll_name_map
+
+            with open(STATE_FILE, "wb") as f:
+                pickle.dump(st.session_state, f)
+
+            st.success("✅ Attendance submitted successfully!")
