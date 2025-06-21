@@ -81,7 +81,7 @@ def show_admin_panel():
     st.subheader(f"🕹️ Attendance Control: `{selected_class}`")
     st.info(f"Status: **{'OPEN' if selected_config['is_open'] else 'CLOSED'}**")
 
-    col1, col2 = st.columns(2)
+    col1, col2, col3 = st.columns(3)
     with col1:
         if st.button("✅ Open Attendance"):
             if other_open_classes:
@@ -95,6 +95,14 @@ def show_admin_panel():
             supabase.table("classroom_settings").update({"is_open": False}).eq("class_name", selected_class).execute()
             st.success("Attendance portal closed.")
             st.rerun()
+    with col3:
+        if st.button("🗑️ Delete Class"):
+            confirm = st.text_input("Type DELETE to confirm", key="delete_confirm")
+            if confirm == "DELETE":
+                supabase.table("attendance").delete().eq("class_name", selected_class).execute()
+                supabase.table("classroom_settings").delete().eq("class_name", selected_class).execute()
+                st.success(f"Class '{selected_class}' and its attendance records deleted.")
+                st.rerun()
 
     # Update code & limit
     st.markdown("### 🔐 Update Attendance Code & Limit")
@@ -130,7 +138,17 @@ def show_admin_panel():
         pivot_df.columns.name = None
         st.dataframe(pivot_df, use_container_width=True)
 
-        if st.button("⬇️ Export Matrix & Push to GitHub"):
+        # Export to CSV locally
+        csv = pivot_df.to_csv(index=False).encode('utf-8')
+        st.download_button(
+            label="⬇️ Download CSV",
+            data=csv,
+            file_name=f"{selected_class}_attendance_matrix.csv",
+            mime='text/csv'
+        )
+
+        # Push to GitHub
+        if st.button("🚀 Push Matrix to GitHub"):
             filename = f"attendance_matrix_{selected_class}_{datetime.now(IST).strftime('%Y%m%d_%H%M%S')}.csv"
             content = pivot_df.to_csv(index=False)
             repo_path = f"records/{filename}"
