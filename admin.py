@@ -122,7 +122,7 @@ def show_admin_panel():
 
     df = pd.DataFrame(records)
     df = df[["date", "roll_number", "name"]]
-    df.columns = ["Date", "Roll Number", "Name"]
+    df.columns = ["Roll Number", "Name", "Date"]
     st.dataframe(df)
 
     # Export and push
