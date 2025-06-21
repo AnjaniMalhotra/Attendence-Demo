@@ -1,152 +1,137 @@
-# ---------- ✅ admin.py (Supabase + Proxy-Proof + Pivot View + Full Features) ----------
+# ---------- ✅ admin.py (Supabase + Timezone Safe + Proxy-Proof) ----------
 
 import streamlit as st
-import pandas as pd
-import pytz
 from datetime import datetime
-from supabase import create_client
+import pandas as pd
 import os
+import pytz
+from supabase import create_client
 from github import Github
+from dotenv import load_dotenv
 
-# --- Timezone Setup ---
-IST = pytz.timezone('Asia/Kolkata')
+# Load secrets
+load_dotenv()
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
+GITHUB_USERNAME = os.getenv("GITHUB_USERNAME")
+GITHUB_REPO = os.getenv("GITHUB_REPO")
+ADMIN_USERNAME = os.getenv("ADMIN_USERNAME")
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD")
+
+# Setup clients
+supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+gh = Github(GITHUB_TOKEN)
+repo = gh.get_user(GITHUB_USERNAME).get_repo(GITHUB_REPO)
+
+# Timezone IST
+IST = pytz.timezone("Asia/Kolkata")
 def current_ist_date():
     return datetime.now(IST).strftime("%Y-%m-%d")
 
-# --- Supabase Setup ---
-SUPABASE_URL = st.secrets["SUPABASE_URL"]
-SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
-supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
-
-# --- Admin + GitHub Credentials ---
-ADMIN_USERNAME = st.secrets["ADMIN_USERNAME"]
-ADMIN_PASSWORD = st.secrets["ADMIN_PASSWORD"]
-GITHUB_TOKEN = st.secrets["GITHUB_TOKEN"]
-GITHUB_USERNAME = st.secrets["GITHUB_USERNAME"]
-GITHUB_REPO = st.secrets["GITHUB_REPO"]
-
-# --- GitHub Push ---
-def push_to_github(df, class_name):
-    g = Github(GITHUB_TOKEN)
-    repo = g.get_user(GITHUB_USERNAME).get_repo(GITHUB_REPO)
-    file_name = f"attendance_{class_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
-    content = df.to_csv(index=False)
-    try:
-        repo.create_file(f"records/{file_name}", f"Upload attendance for {class_name}", content, branch="main")
-        st.success("✅ File pushed to GitHub.")
-    except Exception as e:
-        st.warning(f"⚠️ GitHub push failed: {e}")
-
-# --- Admin Panel UI ---
 def show_admin_panel():
-    st.header("🧑‍🏫 Admin Panel")
+    st.title("🧑‍🏫 Admin Panel")
 
-    # --- Login ---
     if "admin_logged_in" not in st.session_state:
         st.session_state.admin_logged_in = False
 
     if not st.session_state.admin_logged_in:
-        username = st.text_input("Username")
-        password = st.text_input("Password", type="password")
-        if st.button("Login"):
+        username = st.text_input("Username", key="admin_user")
+        password = st.text_input("Password", type="password", key="admin_pass")
+        if st.button("Login", key="admin_login_btn"):
             if username == ADMIN_USERNAME and password == ADMIN_PASSWORD:
                 st.session_state.admin_logged_in = True
-                st.success("✅ Logged in as Admin")
                 st.rerun()
             else:
-                st.error("Invalid credentials")
+                st.error("Invalid credentials.")
         return
 
-    # --- Create New Class ---
-    st.subheader("📂 Create New Classroom")
-    new_class = st.text_input("Class Name")
-    if st.button("Create Classroom"):
-        if new_class.strip():
-            try:
-                table_name = f"attendance_{new_class.replace(' ', '_')}"
-                
-                # 1. Add to classroom_settings
+    if st.sidebar.button("🚪 Logout"):
+        st.session_state.admin_logged_in = False
+        st.rerun()
+
+    st.subheader("📂 Manage Classrooms")
+
+    class_input = st.text_input("Create New Class", key="new_class")
+    if st.button("➕ Add Class"):
+        if class_input.strip():
+            existing = supabase.table("classroom_settings").select("*").eq("class_name", class_input).execute().data
+            if existing:
+                st.warning("⚠️ Class already exists.")
+            else:
                 supabase.table("classroom_settings").insert({
-                    "class_name": new_class,
-                    "is_open": False,
-                    "code": "",
-                    "limit": 1
+                    "class_name": class_input,
+                    "code": "1234",
+                    "daily_limit": 10,
+                    "is_open": False
                 }).execute()
-                
-                # 2. Create attendance table using Supabase RPC
-                supabase.rpc("create_attendance_table", {"table_name": table_name}).execute()
-                
-                st.success(f"✅ Classroom '{new_class}' created and attendance table initialized.")
+                st.success(f"✅ Class '{class_input}' added.")
                 st.rerun()
-            except Exception as e:
-                st.error(f"Error creating classroom: {e}")
 
-    # --- View & Manage Classrooms ---
-    class_data = supabase.table("classroom_settings").select("*").execute().data
-    if not class_data:
-        st.warning("No classrooms available.")
+    # Load all classes
+    classes = supabase.table("classroom_settings").select("*").execute().data
+    if not classes:
+        st.warning("No classes created yet.")
         return
 
-    class_names = [item["class_name"] for item in class_data]
-    selected_class = st.selectbox("Select Classroom", class_names)
-    table_name = f"attendance_{selected_class.replace(' ', '_')}"
-    class_info = next((x for x in class_data if x["class_name"] == selected_class), {})
+    selected_class = st.selectbox("Select a Class", [c["class_name"] for c in classes], key="select_class")
+    selected_config = next(c for c in classes if c["class_name"] == selected_class)
 
-    # --- Open/Close Portal ---
-    st.markdown(f"### 🔄 Attendance Portal: {'🟢 OPEN' if class_info.get('is_open') else '🔴 CLOSED'}")
+    # Ensure only one class is open
+    other_open_classes = [c["class_name"] for c in classes if c["is_open"] and c["class_name"] != selected_class]
+
+    st.subheader(f"🕹️ Attendance Control: `{selected_class}`")
+    st.info(f"Status: **{'OPEN' if selected_config['is_open'] else 'CLOSED'}**")
+
     col1, col2 = st.columns(2)
     with col1:
-        if st.button("Open Attendance"):
-            supabase.table("classroom_settings").update({"is_open": True}).eq("class_name", selected_class).execute()
-            st.rerun()
+        if st.button("✅ Open Attendance"):
+            if other_open_classes:
+                st.warning(f"Close other open classes first: {', '.join(other_open_classes)}")
+            else:
+                supabase.table("classroom_settings").update({"is_open": True}).eq("class_name", selected_class).execute()
+                st.success("Attendance portal opened.")
+                st.rerun()
     with col2:
-        if st.button("Close Attendance"):
+        if st.button("❌ Close Attendance"):
             supabase.table("classroom_settings").update({"is_open": False}).eq("class_name", selected_class).execute()
+            st.success("Attendance portal closed.")
             st.rerun()
 
-    # --- Code & Limit ---
-    st.markdown("### 🔐 Attendance Code & Limit")
-    code = st.text_input("Code", value=class_info.get("code", ""))
-    limit = st.number_input("Limit", value=class_info.get("limit", 1), min_value=1)
-    if st.button("Update Code & Limit"):
-        supabase.table("classroom_settings").update({"code": code, "limit": limit}).eq("class_name", selected_class).execute()
-        st.success("✅ Updated successfully.")
+    # Update code & limit
+    st.markdown("### 🔐 Update Attendance Code & Limit")
+    new_code = st.text_input("Code", value=selected_config["code"], key="update_code")
+    new_limit = st.number_input("Daily Limit", min_value=1, value=selected_config["daily_limit"], step=1, key="update_limit")
+    if st.button("💾 Update Settings"):
+        supabase.table("classroom_settings").update({
+            "code": new_code,
+            "daily_limit": new_limit
+        }).eq("class_name", selected_class).execute()
+        st.success("Updated successfully.")
+        st.rerun()
 
-    # --- Delete Class ---
-    if st.button("🗑️ Delete Class"):
+    # Attendance log for current class
+    st.markdown("### 📊 Attendance Logs")
+    today = current_ist_date()
+    records = supabase.table("attendance").select("*") \
+        .eq("class_name", selected_class).order("date", desc=True).execute().data
+
+    if not records:
+        st.info("No attendance records found.")
+        return
+
+    df = pd.DataFrame(records)
+    df = df[["date", "roll_number", "name"]]
+    df.columns = ["Date", "Roll Number", "Name"]
+    st.dataframe(df)
+
+    # Export and push
+    if st.button("⬇️ Export & Push to GitHub"):
+        filename = f"attendance_{selected_class}_{datetime.now(IST).strftime('%Y%m%d_%H%M%S')}.csv"
+        content = df.to_csv(index=False)
+        repo_path = f"records/{filename}"
         try:
-            supabase.table("classroom_settings").delete().eq("class_name", selected_class).execute()
-            supabase.rpc("drop_attendance_table", {"table_name": table_name}).execute()
-            st.success("Classroom deleted")
-            st.rerun()
+            repo.create_file(repo_path, f"Add attendance for {selected_class}", content, branch="main")
+            st.success(f"✅ File pushed to GitHub: {repo_path}")
         except Exception as e:
-            st.error(f"Failed to delete class: {e}")
-
-    # --- View Attendance (Pivot Table) ---
-    st.markdown("### 📊 Attendance Records")
-    try:
-        records = supabase.table(table_name).select("*").execute().data
-        if not records:
-            st.info("No attendance yet.")
-            return
-
-        df = pd.DataFrame(records)
-        df = df[["roll_number", "name", "date"]]
-
-        # Pivot: Rows = Roll & Name, Columns = Dates
-        pivot_df = df.pivot_table(index=["roll_number", "name"], columns="date", aggfunc="size", fill_value=0)
-        pivot_df = pivot_df.replace(1, "✔️").replace(0, "")
-        pivot_df = pivot_df.reset_index()
-
-        st.dataframe(pivot_df)
-
-        # CSV Download
-        csv = pivot_df.to_csv(index=False).encode("utf-8")
-        st.download_button("⬇️ Download CSV", csv, file_name=f"{selected_class}_pivot_attendance.csv", mime="text/csv")
-
-        # GitHub Push
-        if st.button("📤 Push to GitHub"):
-            push_to_github(pivot_df, selected_class)
-
-    except Exception as e:
-        st.error(f"Error retrieving attendance: {e}")
+            st.warning(f"⚠️ GitHub push failed: {e}")
