@@ -94,20 +94,22 @@ def show_admin_panel():
             supabase.table("classroom_settings").update({"is_open": False}).eq("class_name", selected_class).execute()
             st.success("Attendance portal closed.")
             st.rerun()
-    with col3:
-        st.markdown("### 🗑️ Permanently Delete Class")
-        st.warning("⚠️ This will delete all attendance and student data for this class permanently.")
-        confirm = st.text_input("Type `DELETE` to confirm", key="delete_confirm")
+    st.markdown("---")
+    st.subheader("🗑️ Permanently Delete Class")
+    st.warning("⚠️ This will delete all attendance and student data for this class permanently. This action is irreversible.")
+    
+    confirm = st.text_input("Type `DELETE` to confirm", key="delete_confirm")
+    
+    if st.button("❌ Delete Class Permanently"):
+        if confirm.strip() == "DELETE":
+            supabase.table("attendance").delete().eq("class_name", selected_class).execute()
+            supabase.table("roll_map").delete().eq("class_name", selected_class).execute()
+            supabase.table("classroom_settings").delete().eq("class_name", selected_class).execute()
+            st.success(f"✅ Classroom '{selected_class}' and all its records have been permanently deleted.")
+            st.rerun()
+        else:
+            st.warning("⚠️ Please type `DELETE` exactly to confirm deletion.")
 
-        if st.button("❌ Delete Class Permanently"):
-            if confirm.strip() == "DELETE":
-                supabase.table("attendance").delete().eq("class_name", selected_class).execute()
-                supabase.table("roll_map").delete().eq("class_name", selected_class).execute()
-                supabase.table("classroom_settings").delete().eq("class_name", selected_class).execute()
-                st.success(f"✅ Classroom '{selected_class}' and all its records have been permanently deleted.")
-                st.rerun()
-            else:
-                st.warning("⚠️ Please type `DELETE` exactly to confirm deletion.")
 
     # Update code & limit
     st.markdown("### 🔐 Update Attendance Code & Limit")
