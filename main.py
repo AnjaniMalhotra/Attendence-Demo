@@ -1,31 +1,18 @@
-# main.py
+# ---------- ✅ main.py (Supabase + Streamlit Attendance App) ----------
+
 import streamlit as st
 from admin import show_admin_panel
 from student import show_student_panel
-import os
 
-# ----- Page Configuration -----
-st.set_page_config(page_title="Smart Attendance System", layout="centered")
+st.set_page_config(page_title="Supabase Attendance System", layout="centered")
 
-# ----- Initialize Shared Session State -----
-for key in ["attendance_status", "attendance_codes", "attendance_limits"]:
-    if key not in st.session_state:
-        st.session_state[key] = {}
+# Sidebar Navigation
+st.sidebar.title("📚 Navigation")
+mode = st.sidebar.radio("Choose Mode", ["Student Panel", "Admin Panel"])
 
-# ----- Ensure Refresh Trigger File Exists -----
-REFRESH_FILE = "refresh_trigger.txt"
-if not os.path.exists(REFRESH_FILE):
-    with open(REFRESH_FILE, "w") as f:
-        f.write("init")
+st.title("🧠 Smart Attendance System (Supabase)")
 
-# ----- App Title -----
-st.title("\U0001F4D8 Smart Attendance System")
-
-# ----- Tabs for Role-Based Panels -----
-tab1, tab2 = st.tabs(["\U0001F9D1‍\U0001F3EB Admin Panel", "🎓 Student Panel"])
-
-with tab1:
+if mode == "Admin Panel":
     show_admin_panel()
-
-with tab2:
+else:
     show_student_panel()
