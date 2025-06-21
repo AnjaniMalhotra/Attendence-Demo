@@ -1,63 +1,110 @@
+# ---------- ✅ student.py (Proxy-Proof, Key-Safe, Timezone IST) ----------
+
 import streamlit as st
-from supabase_client import supabase
+import pandas as pd
+import os
 from datetime import datetime
 import pytz
+from supabase import create_client
+from dotenv import load_dotenv
 
+# Load Supabase credentials
+load_dotenv()
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+# IST time
+IST = pytz.timezone("Asia/Kolkata")
 def current_ist_date():
-    return datetime.now(pytz.timezone("Asia/Kolkata")).strftime("%Y-%m-%d")
+    return datetime.now(IST).strftime("%Y-%m-%d")
 
 def show_student_panel():
-    st.subheader("🎓 Student Panel")
+    st.title("🎓 Student Attendance")
 
-    class_name = st.text_input("Enter Class Name")
-    roll_number = st.text_input("Roll Number")
-    name = st.text_input("Your Name")
-    code_input = st.text_input("Attendance Code")
+    # Get available classes
+    res = supabase.table("classroom_settings").select("class_name").execute()
+    class_list = [row["class_name"] for row in res.data]
 
-    if st.button("Submit Attendance"):
-        today = current_ist_date()
+    if not class_list:
+        st.warning("No classrooms available.")
+        return
 
-        # Fetch classroom config
-        res = supabase.table("classroom_settings").select("*").eq("class_name", class_name).execute()
-        if not res.data:
-            st.error("⚠️ Class does not exist.")
+    selected_class = st.selectbox("Select Your Class", class_list, key="class_selector")
+
+    # Fetch classroom config
+    config = supabase.table("classroom_settings").select("*").eq("class_name", selected_class).single().execute().data
+
+    if not config["is_open"]:
+        st.error(f"Attendance for '{selected_class}' is currently CLOSED.")
+        return
+
+    attendance_code = config["code"]
+    daily_limit = config["daily_limit"]
+
+    # Input fields
+    roll_number = st.text_input("Roll Number", key="roll_input")
+    name_input = st.text_input("Name", key="name_input")
+    code_input = st.text_input("Attendance Code", key="code_input")
+
+    # Auto-fetch previous name if roll already exists
+    name_db = supabase.table("roll_map").select("*").eq("class_name", selected_class).eq("roll_number", roll_number).execute().data
+    if name_db:
+        locked_name = name_db[0]["name"]
+        st.info(f"✅ Name auto-filled for Roll {roll_number}: {locked_name}")
+        name = locked_name
+    else:
+        name = name_input
+
+    if st.button("📌 Submit Attendance", key="submit_button"):
+        if code_input != attendance_code:
+            st.error("❌ Invalid Code.")
             return
 
-        config = res.data[0]
-        if not config["status"]:
-            st.warning("🚫 Attendance is currently closed.")
+        # Check if already marked today
+        existing = supabase.table("attendance").select("*") \
+            .eq("class_name", selected_class) \
+            .eq("roll_number", roll_number) \
+            .eq("date", current_ist_date()) \
+            .execute().data
+
+        if existing:
+            st.error("❌ Attendance already submitted for today.")
             return
 
-        if code_input != config["code"]:
-            st.error("❌ Incorrect code.")
+        # Enforce name locking
+        if name_db and name_input and name_input != name_db[0]["name"]:
+            st.error("❌ Name mismatch with registered roll number.")
             return
 
-        # Check if already submitted
-        check = supabase.table("attendance_records")\
-            .select("*")\
-            .eq("class_name", class_name)\
-            .eq("roll_number", roll_number)\
-            .eq("date", today).execute()
-
-        if check.data:
-            st.warning("⚠️ Attendance already submitted for today.")
+        if not name:
+            st.error("❌ Name is required.")
             return
 
-        # Check daily limit
-        today_count = supabase.table("attendance_records")\
-            .select("*")\
-            .eq("class_name", class_name)\
-            .eq("date", today).execute()
+        # Check limit
+        today_count = supabase.table("attendance").select("id", count="exact") \
+            .eq("class_name", selected_class) \
+            .eq("date", current_ist_date()) \
+            .execute().count
 
-        if len(today_count.data) >= config["daily_limit"]:
+        if today_count >= daily_limit:
             st.warning("⚠️ Attendance limit reached.")
             return
 
-        # Submit attendance
-        supabase.table("attendance_records").insert({
-            "class_name": class_name,
+        # Save name lock if first time
+        if not name_db:
+            supabase.table("roll_map").insert({
+                "class_name": selected_class,
+                "roll_number": roll_number,
+                "name": name
+            }).execute()
+
+        # Save attendance
+        supabase.table("attendance").insert({
+            "class_name": selected_class,
             "roll_number": roll_number,
             "name": name,
-            "date": today
+            "date": current_ist_date()
         }).execute()
-        st.success("✅ Attendance submitted successfully.")
+
+        st.success("✅ Attendance marked successfully!")
