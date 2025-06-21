@@ -1,4 +1,4 @@
-# ---------- ✅ main.py (Tabbed Version for Admin and Student) ----------
+# ---------- ✅ main.py (Sidebar Version - Fully Compatible) ----------
 
 import streamlit as st
 from admin import show_admin_panel
@@ -19,14 +19,13 @@ if not os.path.exists(REFRESH_FILE):
     with open(REFRESH_FILE, "w") as f:
         f.write("init")
 
-# ----- App Title -----
+# ----- Sidebar Navigation for Role-Based Panels -----
+st.sidebar.title("🔍 Navigation")
+panel = st.sidebar.radio("Choose Panel", ["Admin Panel", "Student Panel"])
+
 st.title("📘 Smart Attendance System")
 
-# ----- Tabs for Role-Based Panels -----
-tab1, tab2 = st.tabs(["🧑‍🏫 Admin Panel", "🎓 Student Panel"])
-
-with tab1:
+if panel == "Admin Panel":
     show_admin_panel()
-
-with tab2:
+else:
     show_student_panel()
