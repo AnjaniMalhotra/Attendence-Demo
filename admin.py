@@ -108,13 +108,17 @@ def show_admin_panel():
         st.success("Updated successfully.")
         st.rerun()
 
-
-    # Attendance Matrix View (pivoted)
+    # Matrix Attendance View Only
     st.markdown("### 🧾 Attendance Sheet (Matrix View)")
 
-    if records:
+    records = supabase.table("attendance").select("*") \
+        .eq("class_name", selected_class).order("date", desc=True).execute().data
+
+    if not records:
+        st.info("No attendance records found.")
+    else:
         df_matrix = pd.DataFrame(records)
-        df_matrix["status"] = "✅"  # Present entries
+        df_matrix["status"] = "✅"
         pivot_df = df_matrix.pivot_table(
             index=["roll_number", "name"],
             columns="date",
@@ -123,7 +127,7 @@ def show_admin_panel():
             fill_value="❌"
         ).reset_index()
 
-        pivot_df.columns.name = None  # Remove column index name
+        pivot_df.columns.name = None
         st.dataframe(pivot_df, use_container_width=True)
 
         if st.button("⬇️ Export Matrix & Push to GitHub"):
