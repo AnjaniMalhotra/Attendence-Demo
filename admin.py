@@ -1,4 +1,4 @@
-# 📁 admin_app/admin.py (Modularized)
+# 📁 admin_app/admin.py
 
 import streamlit as st
 from datetime import datetime
@@ -14,8 +14,10 @@ from dotenv import load_dotenv
 sys.path.append(os.path.abspath("../shared"))
 from analytics import show_analytics_panel
 
-# ---------- 🌐 Config & Setup ----------
-def setup_clients():
+# Define reusable function
+
+def show_admin_panel():
+    # Load secrets from .env or Streamlit Cloud
     load_dotenv()
     SUPABASE_URL = os.getenv("SUPABASE_URL")
     SUPABASE_KEY = os.getenv("SUPABASE_KEY")
@@ -25,19 +27,23 @@ def setup_clients():
     ADMIN_USERNAME = os.getenv("ADMIN_USERNAME")
     ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD")
 
+    # Setup clients
     supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
     gh = Github(GITHUB_TOKEN)
     repo = gh.get_user(GITHUB_USERNAME).get_repo(GITHUB_REPO)
 
-    return supabase, repo, ADMIN_USERNAME, ADMIN_PASSWORD
+    # App config
+    st.set_page_config(page_title="Admin Panel", layout="wide", page_icon="🧑‍🏫")
+    st.markdown("""
+        <h1 style='text-align: center; color: #4B8BBE;'>🧑‍🏫 Admin Control Panel</h1>
+        <hr style='border-top: 1px solid #bbb;' />
+    """, unsafe_allow_html=True)
 
-# ---------- ⏲️ Utility ----------
-def current_ist_date():
     IST = pytz.timezone("Asia/Kolkata")
-    return datetime.now(IST).strftime("%Y-%m-%d")
+    def current_ist_date():
+        return datetime.now(IST).strftime("%Y-%m-%d")
 
-# ---------- 🔐 Admin Login ----------
-def admin_login(admin_user, admin_pass):
+    # Login Gate
     if "admin_logged_in" not in st.session_state:
         st.session_state.admin_logged_in = False
 
@@ -46,15 +52,14 @@ def admin_login(admin_user, admin_pass):
             username = st.text_input("Username")
             password = st.text_input("Password", type="password")
             if st.form_submit_button("🔐 Login"):
-                if username == admin_user and password == admin_pass:
+                if username == ADMIN_USERNAME and password == ADMIN_PASSWORD:
                     st.session_state.admin_logged_in = True
                     st.rerun()
                 else:
                     st.error("Invalid credentials")
         st.stop()
 
-# ---------- ➕ Sidebar Class Creation + Logout ----------
-def sidebar_controls(supabase):
+    # Logout + Sidebar
     with st.sidebar:
         st.markdown("## ➕ Create Class")
         class_input = st.text_input("New Class Name")
@@ -77,8 +82,7 @@ def sidebar_controls(supabase):
             st.session_state.admin_logged_in = False
             st.rerun()
 
-# ---------- 🛠️ Attendance Controls ----------
-def class_controls(supabase):
+    # Manage Classes
     classes = supabase.table("classroom_settings").select("*").execute().data
     if not classes:
         st.warning("No classes found.")
@@ -111,15 +115,12 @@ def class_controls(supabase):
     with st.expander("🔄 Update Code & Limit"):
         new_code = st.text_input("New Code", value=config["code"])
         new_limit = st.number_input("New Limit", min_value=1, value=config["daily_limit"], step=1)
-        if st.button("📏 Save Settings"):
+        if st.button("💾 Save Settings"):
             supabase.table("classroom_settings").update({"code": new_code, "daily_limit": new_limit}).eq("class_name", selected_class).execute()
             st.success("✅ Settings updated.")
             st.rerun()
 
-    return selected_class
-
-# ---------- 📊 Attendance Matrix + Push ----------
-def show_matrix_and_push(supabase, repo, selected_class):
+    # Attendance matrix
     records = supabase.table("attendance").select("*").eq("class_name", selected_class).order("date", desc=True).execute().data
     if records:
         df = pd.DataFrame(records)
@@ -137,7 +138,7 @@ def show_matrix_and_push(supabase, repo, selected_class):
         st.download_button("⬇️ Download CSV", pivot_df.to_csv(index=False).encode(), f"{selected_class}_matrix.csv", "text/csv")
 
         if st.button("🚀 Push to GitHub"):
-            filename = f"records/attendance_matrix_{selected_class}_{current_ist_date().replace('-', '')}.csv"
+            filename = f"records/attendance_matrix_{selected_class}_{datetime.now(IST).strftime('%Y%m%d_%H%M%S')}.csv"
             try:
                 repo.create_file(filename, f"Push matrix for {selected_class}", pivot_df.to_csv(index=False), branch="main")
                 st.success(f"✅ Uploaded: {filename}")
@@ -146,8 +147,11 @@ def show_matrix_and_push(supabase, repo, selected_class):
     else:
         st.info("No attendance data yet.")
 
-# ---------- 🗑️ Delete Class ----------
-def delete_class(supabase, selected_class):
+    # 📈 Analytics Section
+    with st.expander("📊 Advanced Analytics"):
+        show_analytics_panel()
+
+    # Delete section
     st.subheader("🗑️ Delete Class")
     st.warning("This will permanently delete the class and data.")
     if st.text_input("Type DELETE to confirm") == "DELETE":
@@ -157,20 +161,3 @@ def delete_class(supabase, selected_class):
             supabase.table("classroom_settings").delete().eq("class_name", selected_class).execute()
             st.success("Class deleted.")
             st.rerun()
-
-# ---------- 🧑‍🏫 Main Admin Entry Point ----------
-def show_admin_panel():
-    st.set_page_config(page_title="Admin Panel", layout="wide", page_icon="🧑‍🏫")
-    st.markdown("""
-        <h1 style='text-align: center; color: #4B8BBE;'>🧑‍🏫 Admin Control Panel</h1>
-        <hr style='border-top: 1px solid #bbb;' />
-    """, unsafe_allow_html=True)
-
-    supabase, repo, admin_user, admin_pass = setup_clients()
-    admin_login(admin_user, admin_pass)
-    sidebar_controls(supabase)
-    selected_class = class_controls(supabase)
-    show_matrix_and_push(supabase, repo, selected_class)
-    with st.expander("📊 Advanced Analytics"):
-        show_analytics_panel(selected_class, supabase)
-    delete_class(supabase, selected_class)
