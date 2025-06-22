@@ -1,3 +1,5 @@
+# -------------------- ✅ admin.py --------------------
+
 import streamlit as st
 from datetime import datetime
 import pandas as pd
@@ -22,166 +24,122 @@ supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 gh = Github(GITHUB_TOKEN)
 repo = gh.get_user(GITHUB_USERNAME).get_repo(GITHUB_REPO)
 
-# Timezone IST
 IST = pytz.timezone("Asia/Kolkata")
 def current_ist_date():
     return datetime.now(IST).strftime("%Y-%m-%d")
 
 def show_admin_panel():
-    st.title("🧑‍🏫 Admin Panel")
+    st.title("🧑\u200d🏫 Admin Panel")
 
     if "admin_logged_in" not in st.session_state:
         st.session_state.admin_logged_in = False
 
     if not st.session_state.admin_logged_in:
-        username = st.text_input("Username", key="admin_user")
-        password = st.text_input("Password", type="password", key="admin_pass")
-        if st.button("Login", key="admin_login_btn"):
-            if username == ADMIN_USERNAME and password == ADMIN_PASSWORD:
-                st.session_state.admin_logged_in = True
-                st.rerun()
-            else:
-                st.error("Invalid credentials.")
+        with st.form("admin_login"):
+            username = st.text_input("Username")
+            password = st.text_input("Password", type="password")
+            if st.form_submit_button("🔐 Login"):
+                if username == ADMIN_USERNAME and password == ADMIN_PASSWORD:
+                    st.session_state.admin_logged_in = True
+                    st.rerun()
+                else:
+                    st.error("❌ Invalid credentials.")
         return
 
-    if st.sidebar.button("🚪 Logout"):
-        st.session_state.admin_logged_in = False
-        st.rerun()
+    with st.sidebar:
+        st.markdown("## ➕ Create Class")
+        class_input = st.text_input("New Class Name")
+        if st.button("➕ Add Class"):
+            if class_input.strip():
+                exists = supabase.table("classroom_settings").select("*").eq("class_name", class_input).execute().data
+                if exists:
+                    st.warning("⚠️ Class already exists.")
+                else:
+                    supabase.table("classroom_settings").insert({
+                        "class_name": class_input,
+                        "code": "1234",
+                        "daily_limit": 10,
+                        "is_open": False
+                    }).execute()
+                    st.success(f"✅ Class '{class_input}' created.")
+                    st.rerun()
 
-    st.subheader("📂 Manage Classrooms")
+        if st.button("🚪 Logout"):
+            st.session_state.admin_logged_in = False
+            st.rerun()
 
-    class_input = st.text_input("Create New Class", key="new_class")
-    if st.button("➕ Add Class"):
-        if class_input.strip():
-            existing = supabase.table("classroom_settings").select("*").eq("class_name", class_input).execute().data
-            if existing:
-                st.warning("⚠️ Class already exists.")
-            else:
-                supabase.table("classroom_settings").insert({
-                    "class_name": class_input,
-                    "code": "1234",
-                    "daily_limit": 10,
-                    "is_open": False
-                }).execute()
-                st.success(f"✅ Class '{class_input}' added.")
-                st.rerun()
-
-    # Load all classes
+    st.subheader("🏷️ Select and Manage Class")
     classes = supabase.table("classroom_settings").select("*").execute().data
     if not classes:
-        st.warning("No classes created yet.")
+        st.warning("No classes available.")
         return
 
-    selected_class = st.selectbox("Select a Class", [c["class_name"] for c in classes], key="select_class")
-    selected_config = next(c for c in classes if c["class_name"] == selected_class)
+    selected_class = st.selectbox("📚 Select a Class", [c["class_name"] for c in classes])
+    config = next(c for c in classes if c["class_name"] == selected_class)
 
-    # Show current code and limit
-    current_code = selected_config["code"]
-    current_limit = selected_config["daily_limit"]
-    st.markdown(f"📌 *Current Code:* `{current_code}`")
-    st.markdown(f"📌 *Current Limit:* `{current_limit}`")
+    st.markdown(f"**Current Code:** `{config['code']}`")
+    st.markdown(f"**Current Limit:** `{config['daily_limit']}`")
 
-    other_open_classes = [c["class_name"] for c in classes if c["is_open"] and c["class_name"] != selected_class]
+    st.subheader("🛠️ Attendance Controls")
+    is_open = config["is_open"]
+    other_open = [c["class_name"] for c in classes if c["is_open"] and c["class_name"] != selected_class]
+    st.info(f"Status: **{'OPEN' if is_open else 'CLOSED'}**")
 
-    st.subheader(f"🕹️ Attendance Control: `{selected_class}`")
-    st.info(f"Status: **{'OPEN' if selected_config['is_open'] else 'CLOSED'}**")
-
-    col1, col2, col3 = st.columns(3)
+    col1, col2 = st.columns(2)
     with col1:
         if st.button("✅ Open Attendance"):
-            if other_open_classes:
-                st.warning(f"Close other open classes first: {', '.join(other_open_classes)}")
+            if other_open:
+                st.warning(f"Close other classes first: {', '.join(other_open)}")
             else:
                 supabase.table("classroom_settings").update({"is_open": True}).eq("class_name", selected_class).execute()
-                st.success("Attendance portal opened.")
                 st.rerun()
     with col2:
         if st.button("❌ Close Attendance"):
             supabase.table("classroom_settings").update({"is_open": False}).eq("class_name", selected_class).execute()
-            st.success("Attendance portal closed.")
             st.rerun()
 
-    # Update code & limit
-    st.markdown("### 🔐 Update Attendance Code & Limit")
-    new_code = st.text_input("Code", value=current_code, key="update_code")
-    new_limit = st.number_input("Daily Limit", min_value=1, value=current_limit, step=1, key="update_limit")
-    if st.button("💾 Update Settings"):
-        supabase.table("classroom_settings").update({
-            "code": new_code,
-            "daily_limit": new_limit
-        }).eq("class_name", selected_class).execute()
-        st.success("Updated successfully.")
-        st.rerun()
+    with st.expander("🔄 Update Code & Limit"):
+        new_code = st.text_input("New Code", value=config["code"])
+        new_limit = st.number_input("New Limit", min_value=1, value=config["daily_limit"], step=1)
+        if st.button("💾 Save Settings"):
+            supabase.table("classroom_settings").update({"code": new_code, "daily_limit": new_limit}).eq("class_name", selected_class).execute()
+            st.success("✅ Settings updated.")
+            st.rerun()
 
-    # Matrix Attendance View
-    st.markdown("### 🧾 Attendance Sheet (Matrix View)")
-
-    records = supabase.table("attendance").select("*") \
-        .eq("class_name", selected_class).order("date", desc=True).execute().data
+    st.subheader("📊 Attendance Matrix View")
+    records = supabase.table("attendance").select("*").eq("class_name", selected_class).order("date", desc=True).execute().data
 
     if records:
-        df_matrix = pd.DataFrame(records)
-        df_matrix["status"] = "P"
-        pivot_df = df_matrix.pivot_table(
-            index=["roll_number", "name"],
-            columns="date",
-            values="status",
-            aggfunc="first",
-            fill_value="A"
-        ).reset_index()
-
-        pivot_df.columns.name = None
-
-        # Sort roll_number numerically
+        df = pd.DataFrame(records)
+        df["status"] = "P"
+        pivot_df = df.pivot_table(index=["roll_number", "name"], columns="date", values="status", aggfunc="first", fill_value="A").reset_index()
         pivot_df["roll_number"] = pivot_df["roll_number"].astype(int)
         pivot_df = pivot_df.sort_values("roll_number")
 
-        # Highlight function
-        def highlight_attendance(val):
-            if val == "P":
-                return "background-color: #d4edda; color: green;"  # green for present
-            elif val == "A":
-                return "background-color: #f8d7da; color: red;"    # red for absent
-            return ""
+        def highlight(val):
+            return "background-color:#d4edda;color:green" if val == "P" else "background-color:#f8d7da;color:red"
 
-        styled_df = pivot_df.style.applymap(highlight_attendance, subset=pivot_df.columns[2:])
-        st.dataframe(styled_df, use_container_width=True)
+        styled = pivot_df.style.applymap(highlight, subset=pivot_df.columns[2:])
+        st.dataframe(styled, use_container_width=True)
 
-        # Download
-        csv = pivot_df.to_csv(index=False).encode('utf-8')
-        st.download_button(
-            label="⬇️ Download CSV",
-            data=csv,
-            file_name=f"{selected_class}_attendance_matrix.csv",
-            mime='text/csv'
-        )
+        st.download_button("⬇️ Download CSV", pivot_df.to_csv(index=False).encode(), f"{selected_class}_matrix.csv", "text/csv")
 
-        # Push to GitHub
-        if st.button("🚀 Push Matrix to GitHub"):
-            filename = f"attendance_matrix_{selected_class}_{datetime.now(IST).strftime('%Y%m%d_%H%M%S')}.csv"
-            content = pivot_df.to_csv(index=False)
-            repo_path = f"records/{filename}"
+        if st.button("🚀 Push to GitHub"):
+            filename = f"records/attendance_matrix_{selected_class}_{datetime.now(IST).strftime('%Y%m%d_%H%M%S')}.csv"
             try:
-                repo.create_file(repo_path, f"Add matrix attendance for {selected_class}", content, branch="main")
-                st.success(f"✅ Matrix file pushed to GitHub: {repo_path}")
+                repo.create_file(filename, f"Push matrix for {selected_class}", pivot_df.to_csv(index=False), branch="main")
+                st.success(f"✅ Uploaded: {filename}")
             except Exception as e:
-                st.warning(f"⚠️ GitHub push failed: {e}")
+                st.error(f"GitHub Error: {e}")
     else:
-        st.info("No attendance records yet. You can still delete the class below.")
+        st.info("No attendance yet.")
 
-    # Always show delete option
-    st.markdown("---")
-    st.subheader("🗑️ Permanently Delete Class")
-    st.warning("⚠️ This will delete all attendance and student data for this class permanently. This action is irreversible.")
-    
-    confirm = st.text_input("Type `DELETE` to confirm", key="delete_confirm")
-    
-    if st.button("❌ Delete Class Permanently"):
-        if confirm.strip() == "DELETE":
+    st.subheader("🗑️ Delete Class")
+    st.warning("This will permanently delete the class and all attendance data.")
+    if st.text_input("Type DELETE to confirm") == "DELETE":
+        if st.button("❌ Delete Class"):
             supabase.table("attendance").delete().eq("class_name", selected_class).execute()
             supabase.table("roll_map").delete().eq("class_name", selected_class).execute()
             supabase.table("classroom_settings").delete().eq("class_name", selected_class).execute()
-            st.success(f"✅ Classroom '{selected_class}' and all its records have been permanently deleted.")
+            st.success("Class deleted.")
             st.rerun()
-        else:
-            st.warning("⚠️ Please type `DELETE` exactly to confirm deletion.")
