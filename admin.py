@@ -158,11 +158,7 @@ def show_matrix_and_push(supabase, repo, selected_class):
 
 # ---------- 🧑‍🏫 Main Admin Entry Point ----------
 def show_admin_panel():
-    st.set_page_config(page_title="Admin Panel", layout="wide", page_icon="🧑‍🏫")
-    st.markdown("""
-        <h1 style='text-align: center; color: #4B8BBE;'>🧑‍🏫 Admin Control Panel</h1>
-        <hr style='border-top: 1px solid #bbb;' />
-    """, unsafe_allow_html=True)
+   st.subheader("🧑‍🏫 Admin Control Panel")
 
     supabase, repo, admin_user, admin_pass = setup_clients()
     admin_login(admin_user, admin_pass)
