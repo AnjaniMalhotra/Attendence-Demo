@@ -10,7 +10,7 @@ from supabase import create_client
 from github import Github
 from dotenv import load_dotenv
 
-# 👇 Load shared analytics module
+# 🔻 Load shared analytics module
 sys.path.append(os.path.abspath("../shared"))
 from analytics import show_analytics_panel
 
@@ -53,7 +53,7 @@ if not st.session_state.admin_logged_in:
                 st.error("Invalid credentials")
     st.stop()
 
-# Logout + Class Creation
+# Logout option
 with st.sidebar:
     st.markdown("## ➕ Create Class")
     class_input = st.text_input("New Class Name")
@@ -76,7 +76,7 @@ with st.sidebar:
         st.session_state.admin_logged_in = False
         st.rerun()
 
-# Manage Classes
+# Manage existing classes
 classes = supabase.table("classroom_settings").select("*").execute().data
 if not classes:
     st.warning("No classes found.")
@@ -106,33 +106,25 @@ with col2:
         supabase.table("classroom_settings").update({"is_open": False}).eq("class_name", selected_class).execute()
         st.rerun()
 
-# Update Code & Limit
 with st.expander("🔄 Update Code & Limit"):
     new_code = st.text_input("New Code", value=config["code"])
     new_limit = st.number_input("New Limit", min_value=1, value=config["daily_limit"], step=1)
-    if st.button("💾 Save Settings"):
-        supabase.table("classroom_settings").update({
-            "code": new_code,
-            "daily_limit": new_limit
-        }).eq("class_name", selected_class).execute()
+    if st.button("📏 Save Settings"):
+        supabase.table("classroom_settings").update({"code": new_code, "daily_limit": new_limit}).eq("class_name", selected_class).execute()
         st.success("✅ Settings updated.")
         st.rerun()
 
-# Attendance Matrix
+# Attendance matrix
 records = supabase.table("attendance").select("*").eq("class_name", selected_class).order("date", desc=True).execute().data
 if records:
     df = pd.DataFrame(records)
     df["status"] = "P"
-    pivot_df = df.pivot_table(
-        index=["roll_number", "name"],
-        columns="date",
-        values="status",
-        aggfunc="first",
-        fill_value="A"
-    ).reset_index()
-
+    pivot_df = df.pivot_table(index=["roll_number", "name"], columns="date", values="status", aggfunc="first", fill_value="A").reset_index()
     pivot_df["roll_number"] = pivot_df["roll_number"].astype(int)
     pivot_df = pivot_df.sort_values("roll_number")
+
+    # ✅ Rename columns for analytics compatibility
+    pivot_df = pivot_df.rename(columns={"roll_number": "Roll Number", "name": "Name"})
 
     def highlight(val):
         return "background-color:#d4edda;color:green" if val == "P" else "background-color:#f8d7da;color:red"
@@ -140,15 +132,8 @@ if records:
     styled = pivot_df.style.applymap(highlight, subset=pivot_df.columns[2:])
     st.dataframe(styled, use_container_width=True)
 
-    # 🔽 Download
     st.download_button("⬇️ Download CSV", pivot_df.to_csv(index=False).encode(), f"{selected_class}_matrix.csv", "text/csv")
 
-    # 💾 Save for analytics
-    local_dir = "classes"
-    os.makedirs(local_dir, exist_ok=True)
-    pivot_df.to_csv(os.path.join(local_dir, f"{selected_class}.csv"), index=False)
-
-    # 🚀 Push to GitHub
     if st.button("🚀 Push to GitHub"):
         filename = f"records/attendance_matrix_{selected_class}_{datetime.now(IST).strftime('%Y%m%d_%H%M%S')}.csv"
         try:
@@ -163,7 +148,7 @@ else:
 with st.expander("📊 Advanced Analytics"):
     show_analytics_panel()
 
-# 🗑️ Delete Class
+# Delete section
 st.subheader("🗑️ Delete Class")
 st.warning("This will permanently delete the class and data.")
 if st.text_input("Type DELETE to confirm") == "DELETE":
