@@ -8,6 +8,7 @@ import pytz
 from supabase import create_client
 from github import Github
 from dotenv import load_dotenv
+from analytics import show_analytics_panel  # 📊 Import analytics
 
 # Load secrets
 load_dotenv()
@@ -133,6 +134,10 @@ def show_admin_panel():
                 st.error(f"GitHub Error: {e}")
     else:
         st.info("No attendance yet.")
+
+    # 📊 Analytics Section
+    with st.expander("📈 Advanced Analytics"):
+        show_analytics_panel()
 
     st.subheader("🗑️ Delete Class")
     st.warning("This will permanently delete the class and all attendance data.")
