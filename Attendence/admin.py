@@ -8,7 +8,7 @@ import pytz
 import sys
 from supabase import create_client
 from github import Github
-from github.GithubException import UnknownObjectException
+from github.GithubException import GithubException
 from dotenv import load_dotenv
 
 # ---------- 🌐 Config & Setup ----------
@@ -51,7 +51,7 @@ def admin_login(admin_user, admin_pass):
         st.stop()
 
 # ---------- ➕ Sidebar Class Creation + Logout + Delete ----------
-def sidebar_controls(supabase, selected_class=None):
+def sidebar_controls(supabase):
     with st.sidebar:
         st.markdown("## ➕ Create Class")
         class_input = st.text_input("New Class Name")
@@ -70,22 +70,21 @@ def sidebar_controls(supabase, selected_class=None):
                     st.success(f"Class '{class_input}' created.")
                     st.rerun()
 
-        if selected_class:
-            st.markdown("---")
-            st.markdown("## 🗑️ Delete Class")
-            st.warning("This will permanently delete the class and data.")
-            if st.text_input("Type DELETE to confirm", key="delete_input") == "DELETE":
-                if st.button("❌ Confirm Delete"):
-                    supabase.table("attendance").delete().eq("class_name", selected_class).execute()
-                    supabase.table("roll_map").delete().eq("class_name", selected_class).execute()
-                    supabase.table("classroom_settings").delete().eq("class_name", selected_class).execute()
-                    st.success("Class deleted.")
-                    st.rerun()
-
-        st.markdown("---")
         if st.button("🚪 Logout"):
             st.session_state.admin_logged_in = False
             st.rerun()
+
+        st.markdown("## 🗑️ Delete Class")
+        delete_target = st.text_input("Enter class to delete")
+        if st.button("Delete This Class"):
+            if delete_target.strip():
+                st.warning("This will permanently delete the class and all data.")
+                if st.text_input("Type DELETE to confirm") == "DELETE":
+                    supabase.table("attendance").delete().eq("class_name", delete_target).execute()
+                    supabase.table("roll_map").delete().eq("class_name", delete_target).execute()
+                    supabase.table("classroom_settings").delete().eq("class_name", delete_target).execute()
+                    st.success("Class deleted.")
+                    st.rerun()
 
 # ---------- 🛠️ Attendance Controls ----------
 def class_controls(supabase):
@@ -141,11 +140,7 @@ def show_matrix_and_push(supabase, repo, selected_class):
         def highlight(val):
             return "background-color:#d4edda;color:green" if val == "P" else "background-color:#f8d7da;color:red"
 
-styled = pivot_df.style.map(highlight, subset=pivot_df.columns[2:])
-st.dataframe(styled, use_container_width=True)
-
-
-        styled = pivot_df.style.applymap(highlight, subset=pivot_df.columns[2:])
+        styled = pivot_df.style.map(highlight, subset=pivot_df.columns[2:])
         st.dataframe(styled, use_container_width=True)
 
         st.download_button("⬇️ Download CSV", pivot_df.to_csv(index=False).encode(), f"{selected_class}_matrix.csv", "text/csv")
@@ -167,7 +162,6 @@ st.dataframe(styled, use_container_width=True)
                 )
                 st.success(f"✅ Updated existing file: {filename}")
             except GithubException as e:
-                # If file doesn't exist (404), create it
                 if e.status == 404:
                     repo.create_file(
                         path=filename,
@@ -178,20 +172,19 @@ st.dataframe(styled, use_container_width=True)
                     st.success(f"✅ Created new file: {filename}")
                 else:
                     st.error(f"GitHub Error: {e.data.get('message', str(e))}")
-                
     else:
         st.info("No attendance data yet.")
 
-# ---------- 🧑‍🏫 Main Admin Entry Point ----------
+# ---------- 👩‍🏫 Main Admin Entry Point ----------
 def show_admin_panel():
-    st.set_page_config(page_title="Admin Panel", layout="wide", page_icon="🧑‍🏫")
+    st.set_page_config(page_title="Admin Panel", layout="wide", page_icon="👩‍🏫")
     st.markdown("""
-        <h1 style='text-align: center; color: #4B8BBE;'>🧑‍🏫 Admin Control Panel</h1>
+        <h1 style='text-align: center; color: #4B8BBE;'>👩‍🏫 Admin Control Panel</h1>
         <hr style='border-top: 1px solid #bbb;' />
     """, unsafe_allow_html=True)
 
     supabase, repo, admin_user, admin_pass = setup_clients()
     admin_login(admin_user, admin_pass)
+    sidebar_controls(supabase)
     selected_class = class_controls(supabase)
-    sidebar_controls(supabase, selected_class)
     show_matrix_and_push(supabase, repo, selected_class)
