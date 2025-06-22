@@ -1,8 +1,8 @@
-# ---------- ✅ main.py (Supabase + Streamlit + Tabs UI) ----------
+# ---------- ✅ main.py (Admin + Analytics Tabs) ----------
 
 import streamlit as st
 from admin import show_admin_panel
-from student import show_student_panel
+from analytics import show_analytics_panel  # 📊 Add this
 
 # ---------- 🎨 Page Config ----------
 st.set_page_config(
@@ -15,15 +15,16 @@ st.set_page_config(
 st.markdown(
     """
     <h1 style='text-align: center; color: #4B8BBE;'>🧠 Smart Attendance System</h1>
-    
     <hr style='border-top: 1px solid #bbb;'/>
     """,
     unsafe_allow_html=True
 )
 
 # ---------- 🔄 Role-Based Tabs ----------
-admin_tab = st.tabs(["🧑‍🏫 Admin Panel"])
+admin_tab, analytics_tab = st.tabs(["🧑‍🏫 Admin Panel", "📊 Analytics"])
 
-if __name__ == "__main__":
+with admin_tab:
     show_admin_panel()
 
+with analytics_tab:
+    show_analytics_panel()
