@@ -75,6 +75,12 @@ def show_admin_panel():
     selected_class = st.selectbox("Select a Class", [c["class_name"] for c in classes], key="select_class")
     selected_config = next(c for c in classes if c["class_name"] == selected_class)
 
+    # Show current code and limit
+    current_code = selected_config["code"]
+    current_limit = selected_config["daily_limit"]
+    st.markdown(f"📌 *Current Code:* `{current_code}`")
+    st.markdown(f"📌 *Current Limit:* `{current_limit}`")
+
     other_open_classes = [c["class_name"] for c in classes if c["is_open"] and c["class_name"] != selected_class]
 
     st.subheader(f"🕹️ Attendance Control: `{selected_class}`")
@@ -94,11 +100,11 @@ def show_admin_panel():
             supabase.table("classroom_settings").update({"is_open": False}).eq("class_name", selected_class).execute()
             st.success("Attendance portal closed.")
             st.rerun()
-    
+
     # Update code & limit
     st.markdown("### 🔐 Update Attendance Code & Limit")
-    new_code = st.text_input("Code", value=selected_config["code"], key="update_code")
-    new_limit = st.number_input("Daily Limit", min_value=1, value=selected_config["daily_limit"], step=1, key="update_limit")
+    new_code = st.text_input("Code", value=current_code, key="update_code")
+    new_limit = st.number_input("Daily Limit", min_value=1, value=current_limit, step=1, key="update_limit")
     if st.button("💾 Update Settings"):
         supabase.table("classroom_settings").update({
             "code": new_code,
@@ -113,9 +119,7 @@ def show_admin_panel():
     records = supabase.table("attendance").select("*") \
         .eq("class_name", selected_class).order("date", desc=True).execute().data
 
-    if not records:
-        st.info("No attendance records found.")
-    else:
+    if records:
         df_matrix = pd.DataFrame(records)
         df_matrix["status"] = "✓"
         pivot_df = df_matrix.pivot_table(
@@ -127,6 +131,8 @@ def show_admin_panel():
         ).reset_index()
 
         pivot_df.columns.name = None
+        pivot_df = pivot_df.sort_values("roll_number")  # 🔼 ensure roll numbers are sorted
+
         st.dataframe(pivot_df, use_container_width=True)
 
         # Download locally
@@ -137,7 +143,7 @@ def show_admin_panel():
             file_name=f"{selected_class}_attendance_matrix.csv",
             mime='text/csv'
         )
-        
+
         # Push to GitHub
         if st.button("🚀 Push Matrix to GitHub"):
             filename = f"attendance_matrix_{selected_class}_{datetime.now(IST).strftime('%Y%m%d_%H%M%S')}.csv"
@@ -148,20 +154,22 @@ def show_admin_panel():
                 st.success(f"✅ Matrix file pushed to GitHub: {repo_path}")
             except Exception as e:
                 st.warning(f"⚠️ GitHub push failed: {e}")
-                
-        # Delete classroom
-        st.markdown("---")
-        st.subheader("🗑️ Permanently Delete Class")
-        st.warning("⚠️ This will delete all attendance and student data for this class permanently. This action is irreversible.")
-        
-        confirm = st.text_input("Type `DELETE` to confirm", key="delete_confirm")
-        
-        if st.button("❌ Delete Class Permanently"):
-            if confirm.strip() == "DELETE":
-                supabase.table("attendance").delete().eq("class_name", selected_class).execute()
-                supabase.table("roll_map").delete().eq("class_name", selected_class).execute()
-                supabase.table("classroom_settings").delete().eq("class_name", selected_class).execute()
-                st.success(f"✅ Classroom '{selected_class}' and all its records have been permanently deleted.")
-                st.rerun()
-            else:
-                st.warning("⚠️ Please type `DELETE` exactly to confirm deletion.")
+    else:
+        st.info("No attendance records yet. You can still delete the class below.")
+
+    # Delete classroom (always shown)
+    st.markdown("---")
+    st.subheader("🗑️ Permanently Delete Class")
+    st.warning("⚠️ This will delete all attendance and student data for this class permanently. This action is irreversible.")
+    
+    confirm = st.text_input("Type `DELETE` to confirm", key="delete_confirm")
+    
+    if st.button("❌ Delete Class Permanently"):
+        if confirm.strip() == "DELETE":
+            supabase.table("attendance").delete().eq("class_name", selected_class).execute()
+            supabase.table("roll_map").delete().eq("class_name", selected_class).execute()
+            supabase.table("classroom_settings").delete().eq("class_name", selected_class).execute()
+            st.success(f"✅ Classroom '{selected_class}' and all its records have been permanently deleted.")
+            st.rerun()
+        else:
+            st.warning("⚠️ Please type `DELETE` exactly to confirm deletion.")
