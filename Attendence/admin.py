@@ -69,23 +69,21 @@ def sidebar_controls(supabase):
                     st.success(f"Class '{class_input}' created.")
                     st.rerun()
 
-        st.markdown("---")
+        if st.button("🚪 Logout"):
+            st.session_state.admin_logged_in = False
+            st.rerun()
 
-        selected_class = st.selectbox("Select Class to Delete", [c["class_name"] for c in supabase.table("classroom_settings").select("class_name").execute().data])
-        if st.button("🗑️ Delete Selected Class"):
-            st.warning("This will permanently delete the class and all its data.")
-            if st.text_input("Type DELETE to confirm") == "DELETE":
-                if st.button("❌ Confirm Delete"):
+        st.markdown("## 🗑️ Delete Class")
+        st.warning("This will permanently delete the class and data.")
+        if st.text_input("Type DELETE to confirm") == "DELETE":
+            if st.button("❌ Confirm Delete"):
+                selected_class = st.session_state.get("selected_class")
+                if selected_class:
                     supabase.table("attendance").delete().eq("class_name", selected_class).execute()
                     supabase.table("roll_map").delete().eq("class_name", selected_class).execute()
                     supabase.table("classroom_settings").delete().eq("class_name", selected_class).execute()
                     st.success("Class deleted.")
                     st.rerun()
-
-        st.markdown("---")
-        if st.button("🚪 Logout"):
-            st.session_state.admin_logged_in = False
-            st.rerun()
 
 # ---------- 🛠️ Attendance Controls ----------
 def class_controls(supabase):
@@ -95,6 +93,7 @@ def class_controls(supabase):
         st.stop()
 
     selected_class = st.selectbox("📚 Select a Class", [c["class_name"] for c in classes])
+    st.session_state["selected_class"] = selected_class
     config = next(c for c in classes if c["class_name"] == selected_class)
 
     st.markdown(f"**Current Code:** `{config['code']}`")
@@ -121,14 +120,14 @@ def class_controls(supabase):
     with st.expander("🔄 Update Code & Limit"):
         new_code = st.text_input("New Code", value=config["code"])
         new_limit = st.number_input("New Limit", min_value=1, value=config["daily_limit"], step=1)
-        if st.button("🔯 Save Settings"):
+        if st.button("📏 Save Settings"):
             supabase.table("classroom_settings").update({"code": new_code, "daily_limit": new_limit}).eq("class_name", selected_class).execute()
             st.success("✅ Settings updated.")
             st.rerun()
 
     return selected_class
 
-# ---------- 📊 Attendance Matrix + Push ----------
+# ---------- 📊 Attendance Matrix + Push to GitHub ----------
 def show_matrix_and_push(supabase, repo, selected_class):
     records = supabase.table("attendance").select("*").eq("class_name", selected_class).order("date", desc=True).execute().data
     if records:
@@ -148,17 +147,38 @@ def show_matrix_and_push(supabase, repo, selected_class):
 
         if st.button("🚀 Push to GitHub"):
             filename = f"records/attendance_matrix_{selected_class}_{current_ist_date().replace('-', '')}.csv"
+            content = pivot_df.to_csv(index=False)
             try:
-                repo.create_file(filename, f"Push matrix for {selected_class}", pivot_df.to_csv(index=False), branch="main")
-                st.success(f"✅ Uploaded: {filename}")
+                existing_file = repo.get_contents(filename, ref="main")
+                repo.update_file(
+                    path=filename,
+                    message=f"Update matrix for {selected_class}",
+                    content=content,
+                    sha=existing_file.sha,
+                    branch="main"
+                )
+                st.success(f"✅ Updated existing file: {filename}")
             except Exception as e:
-                st.error(f"GitHub Error: {e}")
+                if "404" in str(e):
+                    repo.create_file(
+                        path=filename,
+                        message=f"Create matrix for {selected_class}",
+                        content=content,
+                        branch="main"
+                    )
+                    st.success(f"✅ Created new file: {filename}")
+                else:
+                    st.error(f"GitHub Error: {e}")
     else:
         st.info("No attendance data yet.")
 
 # ---------- 🧑‍🏫 Main Admin Entry Point ----------
 def show_admin_panel():
-    st.subheader("🧑‍🏫 Admin Control Panel")
+    st.set_page_config(page_title="Admin Panel", layout="wide", page_icon="🧑‍🏫")
+    st.markdown("""
+        <h1 style='text-align: center; color: #4B8BBE;'>🧑‍🏫 Admin Control Panel</h1>
+        <hr style='border-top: 1px solid #bbb;' />
+    """, unsafe_allow_html=True)
 
     supabase, repo, admin_user, admin_pass = setup_clients()
     admin_login(admin_user, admin_pass)
