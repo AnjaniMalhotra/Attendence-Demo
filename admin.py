@@ -103,10 +103,7 @@ def show_admin_panel():
         new_code = st.text_input("New Code", value=config["code"])
         new_limit = st.number_input("New Limit", min_value=1, value=config["daily_limit"], step=1)
         if st.button("💾 Save Settings"):
-            supabase.table("classroom_settings").update({
-                "code": new_code,
-                "daily_limit": new_limit
-            }).eq("class_name", selected_class).execute()
+            supabase.table("classroom_settings").update({"code": new_code, "daily_limit": new_limit}).eq("class_name", selected_class).execute()
             st.success("✅ Settings updated.")
             st.rerun()
 
@@ -116,14 +113,7 @@ def show_admin_panel():
     if records:
         df = pd.DataFrame(records)
         df["status"] = "P"
-        pivot_df = df.pivot_table(
-            index=["roll_number", "name"],
-            columns="date",
-            values="status",
-            aggfunc="first",
-            fill_value="A"
-        ).reset_index()
-
+        pivot_df = df.pivot_table(index=["roll_number", "name"], columns="date", values="status", aggfunc="first", fill_value="A").reset_index()
         pivot_df["roll_number"] = pivot_df["roll_number"].astype(int)
         pivot_df = pivot_df.sort_values("roll_number")
 
@@ -133,23 +123,18 @@ def show_admin_panel():
         styled = pivot_df.style.applymap(highlight, subset=pivot_df.columns[2:])
         st.dataframe(styled, use_container_width=True)
 
-        # ✅ Save locally for analytics panel
-        local_dir = "classes"
-        os.makedirs(local_dir, exist_ok=True)
-        local_path = os.path.join(local_dir, f"{selected_class}_matrix.csv")
-        pivot_df.to_csv(local_path, index=False)
+        # Save renamed version for analytics
+        pivot_df_renamed = pivot_df.rename(columns={"roll_number": "Roll Number", "name": "Name"})
+        local_path = f"classes/{selected_class}_matrix.csv"
+        os.makedirs("classes", exist_ok=True)
+        pivot_df_renamed.to_csv(local_path, index=False)
 
-        st.download_button(
-            "⬇️ Download CSV",
-            pivot_df.to_csv(index=False).encode(),
-            file_name=f"{selected_class}_matrix.csv",
-            mime="text/csv"
-        )
+        st.download_button("⬇️ Download CSV", pivot_df_renamed.to_csv(index=False).encode(), f"{selected_class}_matrix.csv", "text/csv")
 
         if st.button("🚀 Push to GitHub"):
             filename = f"records/attendance_matrix_{selected_class}_{datetime.now(IST).strftime('%Y%m%d_%H%M%S')}.csv"
             try:
-                repo.create_file(filename, f"Push matrix for {selected_class}", pivot_df.to_csv(index=False), branch="main")
+                repo.create_file(filename, f"Push matrix for {selected_class}", pivot_df_renamed.to_csv(index=False), branch="main")
                 st.success(f"✅ Uploaded: {filename}")
             except Exception as e:
                 st.error(f"GitHub Error: {e}")
@@ -167,5 +152,5 @@ def show_admin_panel():
             supabase.table("attendance").delete().eq("class_name", selected_class).execute()
             supabase.table("roll_map").delete().eq("class_name", selected_class).execute()
             supabase.table("classroom_settings").delete().eq("class_name", selected_class).execute()
-            st.success("✅ Class deleted.")
+            st.success("Class deleted.")
             st.rerun()
