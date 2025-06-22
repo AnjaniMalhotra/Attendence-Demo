@@ -44,45 +44,36 @@ with tab2:
         class_list = [entry["class_name"] for entry in supabase.table("classroom_settings").select("class_name").execute().data]
         selected_class = st.selectbox("Select Your Class", class_list)
         roll_number = st.text_input("Enter Your Roll Number").strip()
-
         submit = st.form_submit_button("🔍 Show My Attendance")
 
-        if submit:
-            if not roll_number:
-                st.warning("Please enter your roll number.")
+    if submit:
+        if not roll_number:
+            st.warning("Please enter your roll number.")
+        else:
+            records = (
+                supabase.table("attendance")
+                .select("*")
+                .eq("class_name", selected_class)
+                .eq("roll_number", roll_number)
+                .execute()
+                .data
+            )
+
+            if not records:
+                st.info("No attendance found for this roll number.")
             else:
-                records = (
-                    supabase.table("attendance")
-                    .select("*")
-                    .eq("class_name", selected_class)
-                    .eq("roll_number", roll_number)
-                    .execute()
-                    .data
-                )
+                df = pd.DataFrame(records)
+                df["status"] = "P"
 
-                if not records:
-                    st.info("No attendance found for this roll number.")
-                else:
-                    df = pd.DataFrame(records)
-                    df["status"] = "P"
+                matrix = df.pivot_table(
+                    index=["roll_number", "name"],
+                    columns="date",
+                    values="status",
+                    aggfunc="first",
+                    fill_value="A"
+                ).reset_index()
 
-                    matrix = df.pivot_table(
-                        index=["roll_number", "name"],
-                        columns="date",
-                        values="status",
-                        aggfunc="first",
-                        fill_value="A"
-                    ).reset_index()
+                matrix.columns.name = None
+                matrix = matrix.sort_values("roll_number")
 
-                    matrix.columns.name = None
-                    matrix = matrix.sort_values("roll_number")
-
-                    st.dataframe(matrix, use_container_width=True)
-
-                    csv = matrix.to_csv(index=False).encode("utf-8")
-                    st.download_button(
-                        label="⬇️ Download Attendance Report",
-                        data=csv,
-                        file_name=f"{selected_class}_{roll_number}_attendance.csv",
-                        mime="text/csv"
-                    )
+                st.dataframe(matrix, use_container_width=True)
