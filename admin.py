@@ -125,6 +125,7 @@ def show_admin_panel():
 
         st.download_button("⬇️ Download CSV", pivot_df.to_csv(index=False).encode(), f"{selected_class}_matrix.csv", "text/csv")
 
+        
         if st.button("🚀 Push to GitHub"):
             filename = f"records/attendance_matrix_{selected_class}_{datetime.now(IST).strftime('%Y%m%d_%H%M%S')}.csv"
             try:
@@ -136,8 +137,15 @@ def show_admin_panel():
         st.info("No attendance yet.")
 
     # 📊 Analytics Section
+     # ✅ Save a local copy to /classes/ for analytics
+    local_dir = "classes"
+    os.makedirs(local_dir, exist_ok=True)
+    local_path = os.path.join(local_dir, f"{selected_class}_matrix.csv")
+    pivot_df.to_csv(local_path, index=False)
+    
     with st.expander("📈 Advanced Analytics"):
         show_analytics_panel()
+
 
     st.subheader("🗑️ Delete Class")
     st.warning("This will permanently delete the class and all attendance data.")
