@@ -141,6 +141,10 @@ def show_matrix_and_push(supabase, repo, selected_class):
         def highlight(val):
             return "background-color:#d4edda;color:green" if val == "P" else "background-color:#f8d7da;color:red"
 
+styled = pivot_df.style.map(highlight, subset=pivot_df.columns[2:])
+st.dataframe(styled, use_container_width=True)
+
+
         styled = pivot_df.style.applymap(highlight, subset=pivot_df.columns[2:])
         st.dataframe(styled, use_container_width=True)
 
