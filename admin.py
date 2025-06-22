@@ -131,7 +131,8 @@ def show_admin_panel():
         ).reset_index()
 
         pivot_df.columns.name = None
-        pivot_df = pivot_df.sort_values("roll_number")  # 🔼 ensure roll numbers are sorted
+        pivot_df["roll_number"] = pivot_df["roll_number"].astype(int)
+        pivot_df = pivot_df.sort_values("roll_number")    # 🔼 ensure roll numbers are sorted
 
         st.dataframe(pivot_df, use_container_width=True)
 
