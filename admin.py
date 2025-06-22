@@ -121,19 +121,29 @@ def show_admin_panel():
 
     if records:
         df_matrix = pd.DataFrame(records)
-        df_matrix["status"] = "✓"
+        df_matrix["status"] = "P"
         pivot_df = df_matrix.pivot_table(
             index=["roll_number", "name"],
             columns="date",
             values="status",
             aggfunc="first",
-            fill_value="x"
+            fill_value="A"
         ).reset_index()
 
         pivot_df.columns.name = None
         pivot_df["roll_number"] = pivot_df["roll_number"].astype(int)
         pivot_df = pivot_df.sort_values("roll_number")    # 🔼 ensure roll numbers are sorted
+    # 🔥 Highlight function
+    def highlight_attendance(val):
+        if val == "P":
+            return "background-color: #d4edda; color: green;"  # light green
+        elif val == "A":
+            return "background-color: #f8d7da; color: red;"    # light red
+        return ""
 
+    styled_df = pivot_df.style.applymap(highlight_attendance, subset=pivot_df.columns[2:])
+
+    st.dataframe(styled_df, use_container_width=True)
         st.dataframe(pivot_df, use_container_width=True)
 
         # Download locally
