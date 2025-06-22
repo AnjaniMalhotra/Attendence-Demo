@@ -83,13 +83,14 @@ def show_student_panel():
             st.stop()
 
         # 🔁 Check daily limit
-        attendance_today = (
-            supabase.table("attendance")
-            .select("*", count="exact")
-            .eq("class_name", selected_class)
-            .eq("date", today)
-            .execute()
+        attendance_today_response = (
+        supabase.table("attendance")
+        .select("*", count="exact")
+        .eq("class_name", selected_class)
+        .eq("date", today)
+        .execute()
         )
+
         if attendance_today.count() >= daily_limit:
             st.warning("⚠️ Attendance limit for today has been reached.")
             st.stop()
