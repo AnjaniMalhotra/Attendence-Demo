@@ -30,7 +30,7 @@ def current_ist_date():
     return datetime.now(IST).strftime("%Y-%m-%d")
 
 def show_admin_panel():
-    st.title("🧑\u200d🏫 Admin Panel")
+    st.title("🧑‍🏫 Admin Panel")
 
     if "admin_logged_in" not in st.session_state:
         st.session_state.admin_logged_in = False
@@ -103,7 +103,10 @@ def show_admin_panel():
         new_code = st.text_input("New Code", value=config["code"])
         new_limit = st.number_input("New Limit", min_value=1, value=config["daily_limit"], step=1)
         if st.button("💾 Save Settings"):
-            supabase.table("classroom_settings").update({"code": new_code, "daily_limit": new_limit}).eq("class_name", selected_class).execute()
+            supabase.table("classroom_settings").update({
+                "code": new_code,
+                "daily_limit": new_limit
+            }).eq("class_name", selected_class).execute()
             st.success("✅ Settings updated.")
             st.rerun()
 
@@ -113,7 +116,14 @@ def show_admin_panel():
     if records:
         df = pd.DataFrame(records)
         df["status"] = "P"
-        pivot_df = df.pivot_table(index=["roll_number", "name"], columns="date", values="status", aggfunc="first", fill_value="A").reset_index()
+        pivot_df = df.pivot_table(
+            index=["roll_number", "name"],
+            columns="date",
+            values="status",
+            aggfunc="first",
+            fill_value="A"
+        ).reset_index()
+
         pivot_df["roll_number"] = pivot_df["roll_number"].astype(int)
         pivot_df = pivot_df.sort_values("roll_number")
 
@@ -123,9 +133,19 @@ def show_admin_panel():
         styled = pivot_df.style.applymap(highlight, subset=pivot_df.columns[2:])
         st.dataframe(styled, use_container_width=True)
 
-        st.download_button("⬇️ Download CSV", pivot_df.to_csv(index=False).encode(), f"{selected_class}_matrix.csv", "text/csv")
+        # ✅ Save locally for analytics panel
+        local_dir = "classes"
+        os.makedirs(local_dir, exist_ok=True)
+        local_path = os.path.join(local_dir, f"{selected_class}_matrix.csv")
+        pivot_df.to_csv(local_path, index=False)
 
-        
+        st.download_button(
+            "⬇️ Download CSV",
+            pivot_df.to_csv(index=False).encode(),
+            file_name=f"{selected_class}_matrix.csv",
+            mime="text/csv"
+        )
+
         if st.button("🚀 Push to GitHub"):
             filename = f"records/attendance_matrix_{selected_class}_{datetime.now(IST).strftime('%Y%m%d_%H%M%S')}.csv"
             try:
@@ -137,15 +157,8 @@ def show_admin_panel():
         st.info("No attendance yet.")
 
     # 📊 Analytics Section
-     # ✅ Save a local copy to /classes/ for analytics
-    local_dir = "classes"
-    os.makedirs(local_dir, exist_ok=True)
-    local_path = os.path.join(local_dir, f"{selected_class}_matrix.csv")
-    pivot_df.to_csv(local_path, index=False)
-    
     with st.expander("📈 Advanced Analytics"):
         show_analytics_panel()
-
 
     st.subheader("🗑️ Delete Class")
     st.warning("This will permanently delete the class and all attendance data.")
@@ -154,5 +167,5 @@ def show_admin_panel():
             supabase.table("attendance").delete().eq("class_name", selected_class).execute()
             supabase.table("roll_map").delete().eq("class_name", selected_class).execute()
             supabase.table("classroom_settings").delete().eq("class_name", selected_class).execute()
-            st.success("Class deleted.")
+            st.success("✅ Class deleted.")
             st.rerun()
