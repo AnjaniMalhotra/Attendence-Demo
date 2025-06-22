@@ -158,7 +158,7 @@ def show_matrix_and_push(supabase, repo, selected_class):
 
 # ---------- 🧑‍🏫 Main Admin Entry Point ----------
 def show_admin_panel():
-   st.subheader("🧑‍🏫 Admin Control Panel")
+    st.subheader("🧑‍🏫 Admin Control Panel")
 
     supabase, repo, admin_user, admin_pass = setup_clients()
     admin_login(admin_user, admin_pass)
