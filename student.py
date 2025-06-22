@@ -1,4 +1,4 @@
-# ---------- ✅ student.py ----------
+# ---------- ✅ student.py (no time column) ----------
 
 from datetime import datetime
 import pytz
@@ -10,9 +10,6 @@ def show_student_panel():
     IST = pytz.timezone("Asia/Kolkata")
     def current_ist_date():
         return datetime.now(IST).strftime("%Y-%m-%d")
-    
-    def current_ist_time():
-        return datetime.now(IST).strftime("%H:%M:%S")
 
     # ---------- 🔐 Supabase Setup ----------
     url = st.secrets["SUPABASE_URL"]
@@ -55,7 +52,6 @@ def show_student_panel():
 
     if st.button("✅ Submit Attendance"):
         today = current_ist_date()
-        now_time = current_ist_time()
 
         # 🔐 Check code
         if code_input != required_code:
@@ -107,8 +103,7 @@ def show_student_panel():
             "class_name": selected_class,
             "roll_number": roll_number,
             "name": name,
-            "date": today,
-            "time": now_time
+            "date": today
         }).execute()
 
         st.success("✅ Attendance submitted successfully!")
