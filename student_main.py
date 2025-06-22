@@ -7,67 +7,82 @@ from supabase import create_client
 from datetime import datetime
 import pytz
 
-def current_ist_date():
-    return datetime.now(pytz.timezone("Asia/Kolkata")).strftime("%Y-%m-%d")
+# ---------- Setup ----------
+st.set_page_config(
+    page_title="Student Portal",
+    layout="centered",
+    page_icon="🎓"
+)
 
-# ---------- 🔐 Supabase Setup ----------
+# ---------- Supabase Client ----------
 url = st.secrets["SUPABASE_URL"]
 key = st.secrets["SUPABASE_KEY"]
 supabase = create_client(url, key)
 
-st.set_page_config(
-    page_title="Student Dashboard",
-    page_icon="🎓",
-    layout="centered"
-)
+# ---------- Utilities ----------
+def current_ist_date():
+    return datetime.now(pytz.timezone("Asia/Kolkata")).strftime("%Y-%m-%d")
 
-# ---------- Main Title ----------
-st.title("🎓 Student Attendance Portal")
+# ---------- Page Title (Only Once) ----------
+st.markdown("""
+<h1 style='text-align: center; color: #4B8BBE;'>🎓 Student Attendance Portal</h1>
+<hr style='border-top: 1px solid #bbb;' />
+""", unsafe_allow_html=True)
 
-# ---------- Show Attendance Marking Form ----------
-show_student_panel()
+# ---------- Tabs ----------
+tab1, tab2 = st.tabs(["📥 Mark Attendance", "📅 View My Attendance"])
 
-# ---------- Optional Attendance History Viewer ----------
-st.markdown("---")
-st.subheader("📅 View Your Attendance History")
+# ---------- Tab 1: Mark Attendance ----------
+with tab1:
+    show_student_panel()
 
-with st.form("view_history_form"):
-    view_class = st.selectbox("Select Class", [
-        c["class_name"] for c in supabase.table("classroom_settings").select("class_name").execute().data
-    ])
-    view_roll = st.text_input("Enter Your Roll Number").strip()
+# ---------- Tab 2: View Student's Own Records ----------
+with tab2:
+    st.subheader("📅 Check Your Attendance Record")
 
-    submit_view = st.form_submit_button("🔍 View Attendance")
+    with st.form("view_attendance_form"):
+        class_list = [entry["class_name"] for entry in supabase.table("classroom_settings").select("class_name").execute().data]
+        selected_class = st.selectbox("Select Your Class", class_list)
+        roll_number = st.text_input("Enter Your Roll Number").strip()
 
-    if submit_view:
-        if not view_roll:
-            st.warning("Please enter a roll number.")
-        else:
-            data = supabase.table("attendance").select("*").eq("class_name", view_class).eq("roll_number", view_roll).execute().data
-            if not data:
-                st.info("No attendance records found.")
+        submit = st.form_submit_button("🔍 Show My Attendance")
+
+        if submit:
+            if not roll_number:
+                st.warning("Please enter your roll number.")
             else:
-                df = pd.DataFrame(data)
-                df["status"] = "P"
-
-                # Create pivot matrix
-                matrix = df.pivot_table(
-                    index=["roll_number", "name"],
-                    columns="date",
-                    values="status",
-                    aggfunc="first",
-                    fill_value="A"
-                ).reset_index()
-
-                matrix.columns.name = None
-                matrix = matrix.sort_values("roll_number")
-                st.dataframe(matrix, use_container_width=True)
-
-                # Optional CSV Download
-                csv = matrix.to_csv(index=False).encode("utf-8")
-                st.download_button(
-                    label="⬇️ Download Attendance Report",
-                    data=csv,
-                    file_name=f"{view_class}_{view_roll}_attendance.csv",
-                    mime="text/csv"
+                records = (
+                    supabase.table("attendance")
+                    .select("*")
+                    .eq("class_name", selected_class)
+                    .eq("roll_number", roll_number)
+                    .execute()
+                    .data
                 )
+
+                if not records:
+                    st.info("No attendance found for this roll number.")
+                else:
+                    df = pd.DataFrame(records)
+                    df["status"] = "P"
+
+                    matrix = df.pivot_table(
+                        index=["roll_number", "name"],
+                        columns="date",
+                        values="status",
+                        aggfunc="first",
+                        fill_value="A"
+                    ).reset_index()
+
+                    matrix.columns.name = None
+                    matrix = matrix.sort_values("roll_number")
+
+                    st.dataframe(matrix, use_container_width=True)
+
+                    csv = matrix.to_csv(index=False).encode("utf-8")
+                    st.download_button(
+                        label="⬇️ Download Attendance Report",
+                        data=csv,
+                        file_name=f"{selected_class}_{roll_number}_attendance.csv",
+                        mime="text/csv"
+                    )
