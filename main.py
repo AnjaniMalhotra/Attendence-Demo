@@ -15,6 +15,7 @@ st.set_page_config(
 st.markdown(
     """
     <h1 style='text-align: center; color: #4B8BBE;'>🧠 Smart Attendance System</h1>
+    <h4 style='text-align: center; color: grey;'>Powered by Supabase + Streamlit</h4>
     <hr style='border-top: 1px solid #bbb;'/>
     """,
     unsafe_allow_html=True
