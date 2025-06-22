@@ -111,7 +111,7 @@ def class_controls(supabase):
     with st.expander("🔄 Update Code & Limit"):
         new_code = st.text_input("New Code", value=config["code"])
         new_limit = st.number_input("New Limit", min_value=1, value=config["daily_limit"], step=1)
-        if st.button("💾 Save Settings"):
+        if st.button("📏 Save Settings"):
             supabase.table("classroom_settings").update({"code": new_code, "daily_limit": new_limit}).eq("class_name", selected_class).execute()
             st.success("✅ Settings updated.")
             st.rerun()
@@ -172,5 +172,5 @@ def show_admin_panel():
     selected_class = class_controls(supabase)
     show_matrix_and_push(supabase, repo, selected_class)
     with st.expander("📊 Advanced Analytics"):
-        show_analytics_panel()
+        show_analytics_panel(selected_class, supabase)
     delete_class(supabase, selected_class)
