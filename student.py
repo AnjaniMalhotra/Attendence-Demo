@@ -83,6 +83,8 @@ def show_student_panel():
             .eq("date", today)
             .execute()
         )
+        attendance_count = attendance_today_response.count or 0
+
         if attendance_today_response.count >= daily_limit:
             st.warning("⚠️ Attendance limit for today has been reached.")
             st.stop()
