@@ -24,6 +24,6 @@ st.markdown(
 # ---------- 🔄 Role-Based Tabs ----------
 admin_tab = st.tabs(["🧑‍🏫 Admin Panel"])
 
-with admin_tab:
+if __name__ == "__main__":
     show_admin_panel()
 
