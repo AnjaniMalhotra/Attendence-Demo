@@ -166,16 +166,19 @@ st.dataframe(styled, use_container_width=True)
                     branch=branch
                 )
                 st.success(f"✅ Updated existing file: {filename}")
-            except UnknownObjectException:
-                repo.create_file(
-                    path=filename,
-                    message=commit_message,
-                    content=file_content,
-                    branch=branch
-                )
-                st.success(f"✅ Created new file: {filename}")
-            except Exception as e:
-                st.error(f"GitHub Error: {e}")
+            except GithubException as e:
+                # If file doesn't exist (404), create it
+                if e.status == 404:
+                    repo.create_file(
+                        path=filename,
+                        message=commit_message,
+                        content=file_content,
+                        branch=branch
+                    )
+                    st.success(f"✅ Created new file: {filename}")
+                else:
+                    st.error(f"GitHub Error: {e.data.get('message', str(e))}")
+                
     else:
         st.info("No attendance data yet.")
 
