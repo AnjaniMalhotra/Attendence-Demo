@@ -1,7 +1,7 @@
 # ---------- ✅ main.py (Admin: Supabase + Streamlit + Tabs UI) ----------
 
 import streamlit as st
-from admin import show_admin_panel
+from attendence.admin import show_admin_panel
 from analytics import show_analytics_panel
 
 # ---------- 🎨 Page Config ----------
