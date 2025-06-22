@@ -2,7 +2,7 @@
 
 import streamlit as st
 from Attendence.admin import show_admin_panel
-from analytics import show_analytics_panel
+from Attendence.analytics import show_analytics_panel
 
 # ---------- 🎨 Page Config ----------
 st.set_page_config(
