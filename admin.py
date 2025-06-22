@@ -53,7 +53,7 @@ if not st.session_state.admin_logged_in:
                 st.error("Invalid credentials")
     st.stop()
 
-# Logout option
+# Logout + Class Creation
 with st.sidebar:
     st.markdown("## ➕ Create Class")
     class_input = st.text_input("New Class Name")
@@ -76,7 +76,7 @@ with st.sidebar:
         st.session_state.admin_logged_in = False
         st.rerun()
 
-# Manage existing classes
+# Manage Classes
 classes = supabase.table("classroom_settings").select("*").execute().data
 if not classes:
     st.warning("No classes found.")
@@ -106,20 +106,31 @@ with col2:
         supabase.table("classroom_settings").update({"is_open": False}).eq("class_name", selected_class).execute()
         st.rerun()
 
+# Update Code & Limit
 with st.expander("🔄 Update Code & Limit"):
     new_code = st.text_input("New Code", value=config["code"])
     new_limit = st.number_input("New Limit", min_value=1, value=config["daily_limit"], step=1)
     if st.button("💾 Save Settings"):
-        supabase.table("classroom_settings").update({"code": new_code, "daily_limit": new_limit}).eq("class_name", selected_class).execute()
+        supabase.table("classroom_settings").update({
+            "code": new_code,
+            "daily_limit": new_limit
+        }).eq("class_name", selected_class).execute()
         st.success("✅ Settings updated.")
         st.rerun()
 
-# Attendance matrix
+# Attendance Matrix
 records = supabase.table("attendance").select("*").eq("class_name", selected_class).order("date", desc=True).execute().data
 if records:
     df = pd.DataFrame(records)
     df["status"] = "P"
-    pivot_df = df.pivot_table(index=["roll_number", "name"], columns="date", values="status", aggfunc="first", fill_value="A").reset_index()
+    pivot_df = df.pivot_table(
+        index=["roll_number", "name"],
+        columns="date",
+        values="status",
+        aggfunc="first",
+        fill_value="A"
+    ).reset_index()
+
     pivot_df["roll_number"] = pivot_df["roll_number"].astype(int)
     pivot_df = pivot_df.sort_values("roll_number")
 
@@ -129,8 +140,15 @@ if records:
     styled = pivot_df.style.applymap(highlight, subset=pivot_df.columns[2:])
     st.dataframe(styled, use_container_width=True)
 
+    # 🔽 Download
     st.download_button("⬇️ Download CSV", pivot_df.to_csv(index=False).encode(), f"{selected_class}_matrix.csv", "text/csv")
 
+    # 💾 Save for analytics
+    local_dir = "classes"
+    os.makedirs(local_dir, exist_ok=True)
+    pivot_df.to_csv(os.path.join(local_dir, f"{selected_class}.csv"), index=False)
+
+    # 🚀 Push to GitHub
     if st.button("🚀 Push to GitHub"):
         filename = f"records/attendance_matrix_{selected_class}_{datetime.now(IST).strftime('%Y%m%d_%H%M%S')}.csv"
         try:
@@ -141,11 +159,11 @@ if records:
 else:
     st.info("No attendance data yet.")
 
-# 📈 Analytics Section
+# 📊 Analytics Section
 with st.expander("📊 Advanced Analytics"):
     show_analytics_panel()
 
-# Delete section
+# 🗑️ Delete Class
 st.subheader("🗑️ Delete Class")
 st.warning("This will permanently delete the class and data.")
 if st.text_input("Type DELETE to confirm") == "DELETE":
