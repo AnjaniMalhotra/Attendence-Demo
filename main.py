@@ -22,10 +22,8 @@ st.markdown(
 )
 
 # ---------- 🔄 Role-Based Tabs ----------
-admin_tab, student_tab = st.tabs(["🧑‍🏫 Admin Panel", "🎓 Student Panel"])
+admin_tab = st.tabs(["🧑‍🏫 Admin Panel"])
 
 with admin_tab:
     show_admin_panel()
 
-with student_tab:
-    show_student_panel()
