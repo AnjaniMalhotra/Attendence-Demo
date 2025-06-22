@@ -22,7 +22,13 @@ st.markdown(
 )
 
 # ---------- 🔄 Role-Based Tabs ----------
- student_tab = st.tabs(["🎓 Student Panel"])
+student_tab = st.tabs(["🎓 Student Panel"])
 
-with student_tab:
+# admin_app/admin_main.py
+
+import streamlit as st
+from admin import show_admin_panel  # Now calls the reusable function
+
+if __name__ == "__main__":
     show_student_panel()
+
