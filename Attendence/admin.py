@@ -8,6 +8,7 @@ import pytz
 import sys
 from supabase import create_client
 from github import Github
+from github.GithubException import UnknownObjectException
 from dotenv import load_dotenv
 
 # ---------- 🌐 Config & Setup ----------
@@ -49,8 +50,8 @@ def admin_login(admin_user, admin_pass):
                     st.error("Invalid credentials")
         st.stop()
 
-# ---------- ➕ Sidebar Class Creation + Logout + Delete Class ----------
-def sidebar_controls(supabase):
+# ---------- ➕ Sidebar Class Creation + Logout + Delete ----------
+def sidebar_controls(supabase, selected_class=None):
     with st.sidebar:
         st.markdown("## ➕ Create Class")
         class_input = st.text_input("New Class Name")
@@ -69,21 +70,22 @@ def sidebar_controls(supabase):
                     st.success(f"Class '{class_input}' created.")
                     st.rerun()
 
-        if st.button("🚪 Logout"):
-            st.session_state.admin_logged_in = False
-            st.rerun()
-
-        st.markdown("## 🗑️ Delete Class")
-        st.warning("This will permanently delete the class and data.")
-        if st.text_input("Type DELETE to confirm") == "DELETE":
-            if st.button("❌ Confirm Delete"):
-                selected_class = st.session_state.get("selected_class")
-                if selected_class:
+        if selected_class:
+            st.markdown("---")
+            st.markdown("## 🗑️ Delete Class")
+            st.warning("This will permanently delete the class and data.")
+            if st.text_input("Type DELETE to confirm", key="delete_input") == "DELETE":
+                if st.button("❌ Confirm Delete"):
                     supabase.table("attendance").delete().eq("class_name", selected_class).execute()
                     supabase.table("roll_map").delete().eq("class_name", selected_class).execute()
                     supabase.table("classroom_settings").delete().eq("class_name", selected_class).execute()
                     st.success("Class deleted.")
                     st.rerun()
+
+        st.markdown("---")
+        if st.button("🚪 Logout"):
+            st.session_state.admin_logged_in = False
+            st.rerun()
 
 # ---------- 🛠️ Attendance Controls ----------
 def class_controls(supabase):
@@ -93,7 +95,6 @@ def class_controls(supabase):
         st.stop()
 
     selected_class = st.selectbox("📚 Select a Class", [c["class_name"] for c in classes])
-    st.session_state["selected_class"] = selected_class
     config = next(c for c in classes if c["class_name"] == selected_class)
 
     st.markdown(f"**Current Code:** `{config['code']}`")
@@ -161,17 +162,16 @@ def show_matrix_and_push(supabase, repo, selected_class):
                     branch=branch
                 )
                 st.success(f"✅ Updated existing file: {filename}")
+            except UnknownObjectException:
+                repo.create_file(
+                    path=filename,
+                    message=commit_message,
+                    content=file_content,
+                    branch=branch
+                )
+                st.success(f"✅ Created new file: {filename}")
             except Exception as e:
-                if "404" in str(e):
-                    repo.create_file(
-                        path=filename,
-                        message=commit_message,
-                        content=file_content,
-                        branch=branch
-                    )
-                    st.success(f"✅ Created new file: {filename}")
-                else:
-                    st.error(f"GitHub Error: {e}")
+                st.error(f"GitHub Error: {e}")
     else:
         st.info("No attendance data yet.")
 
@@ -185,6 +185,6 @@ def show_admin_panel():
 
     supabase, repo, admin_user, admin_pass = setup_clients()
     admin_login(admin_user, admin_pass)
-    sidebar_controls(supabase)
     selected_class = class_controls(supabase)
+    sidebar_controls(supabase, selected_class)
     show_matrix_and_push(supabase, repo, selected_class)
