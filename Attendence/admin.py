@@ -127,7 +127,7 @@ def class_controls(supabase):
 
     return selected_class
 
-# ---------- 📊 Attendance Matrix + Push to GitHub ----------
+# ---------- 📊 Attendance Matrix + Push ----------
 def show_matrix_and_push(supabase, repo, selected_class):
     records = supabase.table("attendance").select("*").eq("class_name", selected_class).order("date", desc=True).execute().data
     if records:
@@ -147,24 +147,27 @@ def show_matrix_and_push(supabase, repo, selected_class):
 
         if st.button("🚀 Push to GitHub"):
             filename = f"records/attendance_matrix_{selected_class}_{current_ist_date().replace('-', '')}.csv"
-            content = pivot_df.to_csv(index=False)
+            file_content = pivot_df.to_csv(index=False)
+            commit_message = f"Push matrix for {selected_class}"
+            branch = "main"
+
             try:
-                existing_file = repo.get_contents(filename, ref="main")
+                existing_file = repo.get_contents(filename, ref=branch)
                 repo.update_file(
                     path=filename,
-                    message=f"Update matrix for {selected_class}",
-                    content=content,
+                    message=commit_message,
+                    content=file_content,
                     sha=existing_file.sha,
-                    branch="main"
+                    branch=branch
                 )
                 st.success(f"✅ Updated existing file: {filename}")
             except Exception as e:
                 if "404" in str(e):
                     repo.create_file(
                         path=filename,
-                        message=f"Create matrix for {selected_class}",
-                        content=content,
-                        branch="main"
+                        message=commit_message,
+                        content=file_content,
+                        branch=branch
                     )
                     st.success(f"✅ Created new file: {filename}")
                 else:
