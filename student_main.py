@@ -1,7 +1,7 @@
 # student_main.py
 
 import streamlit as st
-from student import show_student_panel
+from attendence.student import show_student_panel
 import pandas as pd
 from supabase import create_client
 from datetime import datetime
