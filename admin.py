@@ -131,22 +131,23 @@ def show_admin_panel():
         ).reset_index()
 
         pivot_df.columns.name = None
+
+        # Sort roll_number numerically
         pivot_df["roll_number"] = pivot_df["roll_number"].astype(int)
-        pivot_df = pivot_df.sort_values("roll_number")    # 🔼 ensure roll numbers are sorted
-    # 🔥 Highlight function
-    def highlight_attendance(val):
-        if val == "P":
-            return "background-color: #d4edda; color: green;"  # light green
-        elif val == "A":
-            return "background-color: #f8d7da; color: red;"    # light red
-        return ""
+        pivot_df = pivot_df.sort_values("roll_number")
 
-    styled_df = pivot_df.style.applymap(highlight_attendance, subset=pivot_df.columns[2:])
+        # Highlight function
+        def highlight_attendance(val):
+            if val == "P":
+                return "background-color: #d4edda; color: green;"  # green for present
+            elif val == "A":
+                return "background-color: #f8d7da; color: red;"    # red for absent
+            return ""
 
-    st.dataframe(styled_df, use_container_width=True)
-        st.dataframe(pivot_df, use_container_width=True)
+        styled_df = pivot_df.style.applymap(highlight_attendance, subset=pivot_df.columns[2:])
+        st.dataframe(styled_df, use_container_width=True)
 
-        # Download locally
+        # Download
         csv = pivot_df.to_csv(index=False).encode('utf-8')
         st.download_button(
             label="⬇️ Download CSV",
@@ -168,7 +169,7 @@ def show_admin_panel():
     else:
         st.info("No attendance records yet. You can still delete the class below.")
 
-    # Delete classroom (always shown)
+    # Always show delete option
     st.markdown("---")
     st.subheader("🗑️ Permanently Delete Class")
     st.warning("⚠️ This will delete all attendance and student data for this class permanently. This action is irreversible.")
