@@ -134,8 +134,12 @@ def show_matrix_and_push(supabase, repo, selected_class):
         df = pd.DataFrame(records)
         df["status"] = "P"
         pivot_df = df.pivot_table(index=["roll_number", "name"], columns="date", values="status", aggfunc="first", fill_value="A").reset_index()
+        pivot_df["roll_number"] = pd.to_numeric(pivot_df["roll_number"], errors="coerce")
+        pivot_df = pivot_df.dropna(subset=["roll_number"])
         pivot_df["roll_number"] = pivot_df["roll_number"].astype(int)
+
         pivot_df = pivot_df.sort_values("roll_number")
+
 
         def highlight(val):
             return "background-color:#d4edda;color:green" if val == "P" else "background-color:#f8d7da;color:red"
